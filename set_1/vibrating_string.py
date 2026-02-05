@@ -49,7 +49,7 @@ for j, initial_condition in enumerate(initial_conditions):
     result = simulate(initial_condition)
     plt.subplot(3, 1, j+1)
     for i, state in enumerate(result):
-        plt.plot(x, state, alpha=0.5)
+        plt.plot(x, state, alpha=0.5, label=f't={i*100*dt:.1f}')
     plt.title(titles[j])
     plt.ylabel("Amplitude")
 
