@@ -54,4 +54,4 @@ for j, initial_condition in enumerate(initial_conditions):
     plt.ylabel("Amplitude")
 
 plt.tight_layout()
-plt.show()
+plt.savefig('set_1/figures/vibrating_string.png')
