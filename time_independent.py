@@ -116,23 +116,29 @@ def sor_iterations(omega, N=50, max_iter=10000, threshold=conv_threshold):
             return k
     return max_iter
 
-def golden_section_search(f, a, b, tol=1e-3, iter=0, max_iter=100, f_args=()):
+def golden_section_search(f, a, b, tol=1e-3, iter=0, max_iter=100, f_args=(), c=None, d=None, fc=None, fd=None):
     """Find the value of x in [a, b] that minimizes f(x) using recursive golden section search."""
     if iter >= max_iter:
         print("Maximum iterations reached in golden section search")
         return (a + b) / 2
-    if b - a < tol:
+    h = b - a
+    if h < tol:
         print(f"Golden section search converged after {iter} iterations")
-        return (a + b) / 2
+        return (a + b) / 2    
     gr = (1 + np.sqrt(5)) / 2  # golden ratio
-    x1 = b - (b - a) / gr
-    x2 = a + (b - a) / gr
-    f1 = f(x1, *f_args)
-    f2 = f(x2, *f_args)
-    if f1 < f2:
-        return golden_section_search(f, a, x2, tol, iter + 1, max_iter, f_args)
+    if c is None:
+        c = a+ h * (1/(gr*gr))
+    if d is None:
+        d = a + h * (1/gr)
+    if fc is None:
+        fc = f(c, *f_args)
+    if fd is None:
+        fd = f(d, *f_args)
+    print(f"Iter {iter+1}: a={a:.4f}, b={b:.4f}, c={c:.4f} (f={fc}), d={d:.4f} (f={fd})")
+    if fc < fd:
+        return golden_section_search(f, a, d, tol, iter+1, max_iter, f_args, d=c, fd=fc)
     else:
-        return golden_section_search(f, x1, b, tol, iter + 1, max_iter, f_args)
+        return golden_section_search(f, c, b, tol, iter+1, max_iter, f_args, c=d, fc=fd)
 
 
 gs_optimal_omega = golden_section_search(sor_iterations, 1.7, 2.0)
@@ -171,19 +177,19 @@ ns = [5, 20, 50, 100, 200]
 optimal_omegas = {}
 iterations = {}
 for n in ns:
-    opt_omega = golden_section_search(sor_iterations, 1.7, 2.0, f_args=(n,))
+    opt_omega = golden_section_search(sor_iterations, 1.0, 2.0, f_args=(n,))
     optimal_omegas[n] = opt_omega
     iterations[n] = sor_iterations(opt_omega, N=n)
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 ax1.plot(ns, [optimal_omegas[n] for n in ns], marker='o')
-ax1.set_title("Optimal $\omega$ vs N")
-ax1.set_xlabel("N")
-ax1.set_ylabel("Optimal $\omega$")
+ax1.set_title("Optimal $\omega$ vs N", fontsize=20)
+ax1.set_xlabel("N", fontsize=16)
+ax1.set_ylabel("Optimal $\omega$", fontsize=16)
 ax1.set_xticks(ns)
 ax2.plot(ns, [iterations[n] for n in ns], marker='o')
 ax2.set_title("Iterations to Converge vs N")
-ax2.set_xlabel("N")
-ax2.set_ylabel("Iterations to Converge")
+ax2.set_xlabel("N", fontsize=16)
+ax2.set_ylabel("Iterations to Converge", fontsize=16)
 ax2.set_xticks(ns)
 plt.tight_layout()
 plt.savefig("sor_optimal_omega_and_iterations.png")
