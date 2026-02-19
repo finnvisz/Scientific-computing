@@ -48,9 +48,10 @@ plt.figure(figsize=(12, 8))
 for j, initial_condition in enumerate(initial_conditions):
     result = simulate(initial_condition)
     plt.subplot(3, 1, j+1)
+    colors = plt.cm.viridis(np.linspace(0, 1, len(result))) # Fades from purple to yellow
     for i, state in enumerate(result):
-        plt.plot(x, state, alpha=0.5)
-    plt.title(titles[j])
+        plt.plot(x, state, color=colors[i], alpha=0.3)
+    plt.title(titles[j], fontsize=20)
     plt.ylabel("Amplitude")
 
 plt.tight_layout()
