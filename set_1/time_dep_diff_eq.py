@@ -87,13 +87,13 @@ plt.savefig(f'set_1/figures/numerical_vs_analytic.png')
 #########################
 ## F) 2D concentration ##
 #########################
-
 curr_t=0 # Reset current time
 c = np.zeros((N+1, N+1))
 c[N, :] = 1.0  # Reset Top boundary
 # Loop until t=1.0
 while curr_t <= 1.0:
     if any(np.isclose(curr_t, t_target, atol=dt/2) for t_target in times_to_plot):
+        plt.figure(figsize=(10, 6))
         plt.imshow(c, extent=[0,1,0,1], origin='lower', cmap='viridis')
         plt.title(f"Time t = {curr_t:.3f}")
         plt.colorbar()
