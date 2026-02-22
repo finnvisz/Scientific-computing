@@ -2,8 +2,6 @@
 Wave equation (1.1): vibrating string.
 Initial conditions, time stepping, simulation run, animation.
 """
-# TODO: move from notebook / vibrating_string: create_initial_conditions, wave_time_step,
-#       run_wave_simulation (plot + store frames), create_wave_animation
 
 import numpy as np
 from scientific_computing_set1.solvers.time_stepping import wave_first_step, wave_time_step
@@ -44,7 +42,7 @@ def simulate(initial_psi, timesteps=1000):
     return results
 
 def create_initial_conditions(x):
-    """Create the three initial conditions for the wave equation (your notebook)."""
+    """Create the three initial conditions for the wave equation."""
     psi_i = np.sin(2 * np.pi * x)
     psi_ii = np.sin(5 * np.pi * x)
     psi_iii = np.where((x > 1/5) & (x < 2/5), np.sin(5 * np.pi * x), 0)
@@ -52,8 +50,7 @@ def create_initial_conditions(x):
 
 def run_wave_simulation(x, dt, c, N, plot_every=450, frame_skip=100, show_plot=True, timesteps=1000, savepath=None):
     """
-    Run wave equation for all three ICs with your notebook-style plotting.
-    Uses partner's wave_first_step / wave_time_step. Returns stored frames.
+    Run wave equation for all three ICs
     """
     psi_i, psi_ii, psi_iii = create_initial_conditions(x)
     psi_past_i = np.copy(psi_i)

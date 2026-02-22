@@ -1,8 +1,6 @@
 """
 Plotting utilities for wave, diffusion, and Laplace results.
 """
-# TODO: move from notebook: plot_concentration_profiles, plot_final_states,
-#       wave animation setup; any other figure/axis helpers
 
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
@@ -12,7 +10,7 @@ import matplotlib.animation as animation
 # -------- Wave Equationn (1.1) --------
 
 def init_wave_plot(show_plot=True):
-    """Create 1x3 figure and axes for wave equation (your notebook style)."""
+    """Create 1x3 figure and axes for wave equation."""
     if not show_plot:
         return None, None
     fig, axes = plt.subplots(1, 3, figsize=(14, 4))
@@ -20,7 +18,7 @@ def init_wave_plot(show_plot=True):
 
 
 def update_wave_plot(axes, x, psi_i, psi_ii, psi_iii, color):
-    """Add one snapshot (three curves) with given color (your notebook style)."""
+    """Add one snapshot (three curves) with given color."""
     if axes is None:
         return
     axes[0].plot(x, psi_i, color=color, alpha=0.8)
@@ -29,7 +27,7 @@ def update_wave_plot(axes, x, psi_i, psi_ii, psi_iii, color):
 
 
 def finalize_wave_plot(fig, axes, cmap, norm, savepath=None):
-    """Set titles, colorbar, tight_layout, optionally save, then show (your notebook style)."""
+    """Set titles, colorbar, tight_layout, optionally save, then show."""
     if axes is None:
         return
     axes[0].set_title(r'$\sin(2\pi x)$')
@@ -51,7 +49,7 @@ def create_wave_animation(x, stored_i, stored_ii, stored_iii,
                           titles=None, ylim=(-1, 1), interval=50, savepath=None):
     """
     Create animation from stored wave frames.
-    If savepath is set (e.g. .gif or .mp4), the animation is saved to file.
+
     """
     if titles is None:
         titles = [
@@ -83,7 +81,6 @@ def create_wave_animation(x, stored_i, stored_ii, stored_iii,
     )
 
     if savepath is not None:
-        # .gif: writer='pillow' or 'imagemagick'; .mp4: writer='ffmpeg'
         try:
             anim.save(savepath, writer='pillow')
         except Exception:
@@ -97,7 +94,6 @@ def plot_diffusion_numerical_vs_analytic(y_coords, data_list, savepath=None):
     """
     Plot numerical vs analytic solution at several times (E).
     data_list: list of (c_slice, c_analytic, t) for each target time.
-    Migrated from time_dep_diff_eq.py as-is.
     """
     plt.figure(figsize=(10, 6))
     for c_slice, c_analytic, t in data_list:
@@ -117,7 +113,6 @@ def plot_diffusion_numerical_vs_analytic(y_coords, data_list, savepath=None):
 def plot_diffusion_2d_snapshot(c, t, savepath=None):
     """
     Single 2D concentration snapshot (F). extent [0,1,0,1], origin lower, viridis.
-    Migrated from time_dep_diff_eq.py as-is.
     """
     plt.imshow(c, extent=[0, 1, 0, 1], origin='lower', cmap='viridis')
     plt.title(f"Time t = {t:.3f}")
@@ -130,7 +125,6 @@ def plot_diffusion_2d_snapshot(c, t, savepath=None):
 def create_diffusion_animation(step_fn, c_init, r, N, frames=200, steps_per_frame=5, interval=50, savepath=None):
     """
     Animation of 2D diffusion evolution (G). step_fn(c_curr, r, N) returns c_next.
-    Migrated from time_dep_diff_eq.py as-is (5 steps per frame, 200 frames).
     """
     fig, ax = plt.subplots(figsize=(6, 5))
     c_holder = [c_init.copy()]
@@ -168,6 +162,28 @@ def plot_state_array(M, title=None, savepath=None):
         plt.show()
     plt.close()
 
+def plot_state_arrays(Ms, titles=None, suptitle=None, savepath=None):
+    """
+    Plot multiple 2D state arrays in one figure (1 row). For "Steady States by Method" (Jacobi, GS, SOR).
+    """
+    n = len(Ms)
+    if titles is None or len(titles) < n:
+        raise ValueError("titles must be provided and have length >= len(Ms)")
+    fig, axes = plt.subplots(1, n, figsize=(5 * n, 5))
+    if n == 1:
+        axes = [axes]
+    if suptitle is not None:
+        fig.suptitle(suptitle, fontsize=16)
+    for i, M in enumerate(Ms):
+        im = axes[i].imshow(M, cmap='viridis')
+        fig.colorbar(im, ax=axes[i])
+        axes[i].set_title(titles[i])
+    plt.tight_layout()
+    if savepath is not None:
+        plt.savefig(savepath)
+    else:
+        plt.show()
+    plt.close()
 
 def plot_error(errs, title=None, savepath=None):
     """
@@ -178,6 +194,75 @@ def plot_error(errs, title=None, savepath=None):
     plt.ylabel("$\delta$")
     plt.yscale("log")
     plt.plot(errs)
+    if savepath is not None:
+        plt.savefig(savepath)
+    else:
+        plt.show()
+    plt.close()
+
+def plot_convergence_rates(
+    errs_jacobi,
+    errs_gauss_seidel,
+    errs_sor,
+    conv_threshold,
+    errs_by_omega=None,
+    omegas=None,
+    gs_optimal_omega=None,
+    savepath=None,
+):
+    """
+    Single plot: Jacobi, Gauss-Seidel, SOR (optimal) error vs iteration (log scale),
+    optional extra SOR curves per omega, and horizontal line at conv_threshold.
+    """
+    plt.title("Convergence Rates")
+    plt.xlabel("k")
+    plt.ylabel("Error")
+    plt.plot(errs_jacobi, label="Jacobi")
+    plt.plot(errs_gauss_seidel, label="Gauss-Seidel")
+    sor_label = f"SOR, $\\omega={gs_optimal_omega:.4f}$ (optimal)" if gs_optimal_omega is not None else "SOR (optimal)"
+    plt.plot(errs_sor, label=sor_label)
+    if errs_by_omega is not None and omegas is not None:
+        for omega in omegas:
+            if omega in errs_by_omega:
+                plt.plot(errs_by_omega[omega], label=f"SOR, $\\omega={omega}$")
+    plt.axhline(y=conv_threshold, color="k", linestyle="--", label="Convergence Threshold")
+    plt.yscale("log")
+    plt.legend()
+    if savepath is not None:
+        plt.savefig(savepath)
+    else:
+        plt.show()
+    plt.close()
+
+
+def plot_convergence_rates_random(
+    errs_r_jacobi,
+    errs_r_gauss_seidel,
+    errs_r_sor,
+    errs_jacobi,
+    errs_gauss_seidel,
+    errs_sor,
+    conv_threshold,
+    gs_optimal_omega=None,
+    savepath=None,
+):
+    """
+    Convergence rates with random initial state: solid = random init (Jacobi, GS, SOR),
+    dashed = non-random for comparison. Log scale and threshold line.
+    """
+    plt.title("Convergence Rates with Random Initial State")
+    plt.xlabel("k")
+    plt.ylabel("Error")
+    plt.plot(errs_r_jacobi, "C0", label="Jacobi")
+    plt.plot(errs_r_gauss_seidel, "C1", label="Gauss-Seidel")
+    sor_label = f"SOR, $\\omega={gs_optimal_omega:.4f}$ (optimal)" if gs_optimal_omega is not None else "SOR (optimal)"
+    plt.plot(errs_r_sor, "C2", label=sor_label)
+    plt.plot(errs_jacobi, "C0--")
+    plt.plot(errs_gauss_seidel, "C1--")
+    plt.plot(errs_sor, "C2--")
+    plt.axhline(y=conv_threshold, color="k", linestyle="--", label="Convergence Threshold")
+    plt.yscale("log")
+    plt.legend()
     if savepath is not None:
         plt.savefig(savepath)
     else:
@@ -253,4 +338,41 @@ def plot_question_k_optimal_omega_sweeps(
     if savepath is not None:
         plt.savefig(savepath)
     plt.show()
+    plt.close()
+
+
+def plot_concentration_profiles(profiles_jacobi, profiles_gauss, profiles_sor, N, savepath=None):
+    """
+    Three panels: Jacobi, Gauss-Seidel, SOR. Each panel plots 1D concentration profiles
+    (row y=1) at selected iterations, colored early → converged (viridis).
+    """
+    import numpy as np
+    fig, axes = plt.subplots(1, 3, figsize=(14, 5))
+    x = np.linspace(0, 1, N)
+    for i, profile in enumerate(profiles_jacobi):
+        axes[0].plot(x, profile, color=plt.cm.viridis(i / max(1, len(profiles_jacobi))))
+    for i, profile in enumerate(profiles_gauss):
+        axes[1].plot(x, profile, color=plt.cm.viridis(i / max(1, len(profiles_gauss))))
+    for i, profile in enumerate(profiles_sor):
+        axes[2].plot(x, profile, color=plt.cm.viridis(i / max(1, len(profiles_sor))))
+    axes[0].set_title(r'Jacobi')
+    axes[0].set_ylim(0, 1)
+    axes[0].set_xlabel('x')
+    axes[0].set_ylabel(r'$c_{i,j}^k$')
+    axes[1].set_title(r'Gauss-Seidel')
+    axes[1].set_ylim(0, 1)
+    axes[1].set_xlabel('x')
+    axes[1].set_ylabel(r'$c_{i,j}^k$')
+    axes[2].set_title(r'SOR')
+    axes[2].set_ylim(0, 1)
+    axes[2].set_xlabel('x')
+    axes[2].set_ylabel(r'$c_{i,j}^k$')
+    plt.tight_layout()
+    sm = plt.cm.ScalarMappable(cmap='viridis', norm=plt.Normalize(0, 1))
+    sm.set_array([])
+    fig.colorbar(sm, ax=axes, label='Iteration (Early → Converged)')
+    if savepath is not None:
+        plt.savefig(savepath)
+    else:
+        plt.show()
     plt.close()

@@ -21,14 +21,14 @@ y_coords = np.linspace(0, 1, N + 1)
 times_to_plot = [0, 0.001, 0.01, 0.1, 1.0]
 
 def initial_concentration_grid(N):
-    """Initial 2D grid: zeros with top boundary c[N, :] = 1.0 (migrated as-is)."""
+    """Initial 2D grid: zeros with top boundary c[N, :] = 1.0."""
     c = np.zeros((N + 1, N + 1))
     c[N, :] = 1.0  # Top boundary condition
     return c
 
 
 def analytic_solution(y, t, D, terms=100):
-    """Analytic solution (migrated from time_dep_diff_eq.py as-is)."""
+    """Analytic solution."""
     if t == 0:
         return np.zeros_like(y)
     res = np.zeros_like(y)

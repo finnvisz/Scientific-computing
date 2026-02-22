@@ -1,20 +1,19 @@
 """
 Time-stepping utilities for PDEs (e.g. wave equation, time-dependent diffusion).
 """
-# TODO: move from notebook / vibrating_string / time_dep_diff_eq: time step logic, frame storage
 
 import numpy as np
 
 
 def wave_first_step(psi_past, psi_now, c, dt, N):
-    """First time step (migrated from vibrating_string.py as-is)."""
+    """First time step."""
     for i in range(1, N):
         psi_now[i] = psi_past[i] + 0.5 * (c * dt *N)**2 * (psi_past[i+1] - 2*psi_past[i] + psi_past[i-1])
     return psi_now
 
 
 def wave_time_step(psi_past, psi_now, psi_next, c, dt, N):
-    """One time step (migrated from vibrating_string.py as-is)."""
+    """One time step."""
     for i in range(1, N):
         psi_next[i] = 2*psi_now[i] - psi_past[i] + (c * dt *N)**2 * (psi_now[i+1] - 2*psi_now[i] + psi_now[i-1])
 
@@ -26,7 +25,6 @@ def wave_time_step(psi_past, psi_now, psi_next, c, dt, N):
 def diffusion_2d_step(c_curr, r, N):
     """
     One time step for 2D diffusion with periodic x, fixed top (c[N,:]=1).
-    Migrated from time_dep_diff_eq.py as-is.
     """
     c_next = c_curr.copy()
 

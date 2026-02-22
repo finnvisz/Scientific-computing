@@ -11,7 +11,6 @@ Main script to run all questions (Scientific Computing Set 1).
 Main script to run all questions (Scientific Computing Set 1).
 """
 from scientific_computing_set1.models.wave_equation import (x,dt,c,N,run_wave_simulation,)
-from scientific_computing_set1.utils.plotting import create_wave_animation
 
 from scientific_computing_set1.models.diffusion_2d import (
     N as N_diff,
@@ -21,42 +20,26 @@ from scientific_computing_set1.models.diffusion_2d import (
     run_2d_snapshots,
 )
 from scientific_computing_set1.solvers.time_stepping import diffusion_2d_step
-from scientific_computing_set1.utils.plotting import (
-    create_wave_animation,
-    plot_diffusion_numerical_vs_analytic,
-    plot_diffusion_2d_snapshot,
-    create_diffusion_animation,
-)
 
 import numpy as np
 import matplotlib.pyplot as plt
-from scientific_computing_set1.models.laplace import (
-    conv_threshold,
-    state_array,
-    sor_iterations,
-)
+
 from scientific_computing_set1.solvers.iterative import (
     jacobi_step,
     gauss_seidel_step,
     successive_over_relaxation_step,
 )
 from scientific_computing_set1.utils.convergence import golden_section_search
-from scientific_computing_set1.utils.plotting import (
-    create_wave_animation,
-    plot_diffusion_numerical_vs_analytic,
-    plot_diffusion_2d_snapshot,
-    create_diffusion_animation,
-    plot_state_array,
-    plot_error,
-)
 
 from scientific_computing_set1.models.laplace import (
     conv_threshold,
     state_array,
     sor_iterations,
+    sor_iterations_with_history,
     objects_in_cntr,
     objects_in_domain_multiple,
     rectangles_for_count,
+    jacobi_iteration,
     gauss_seidel_iteration,
     sor_iteration,
 )
@@ -68,29 +51,33 @@ from scientific_computing_set1.utils.plotting import (
     create_diffusion_animation,
     plot_state_array,
     plot_error,
+    plot_state_arrays,
+    plot_convergence_rates,
+    plot_convergence_rates_random,
     plot_question_k_iteration_sweeps,
     plot_question_k_optimal_omega_sweeps,
+    plot_concentration_profiles,
 )
 
 
 def main():
     """Run all assignment questions."""
+    out = "set_1/scientific_computing_set1/outputs/figures"
     # 1.1 Wave equation (vibrating string)
     stored_i, stored_ii, stored_iii = run_wave_simulation(
         x, dt, c, N,
-        plot_every=450,
+        plot_every=800,
         frame_skip=100,
         show_plot=True,
-        savepath="scientific_computing_set1/outputs/figures/wave_equation.png"
+        savepath=f"{out}/wave_equation.png"
     )
 
     anim = create_wave_animation(
         x, stored_i, stored_ii, stored_iii,
-        savepath="scientific_computing_set1/outputs/figures/wave_animation.gif",
+        savepath=f"{out}/wave_animation.gif",
     )
 
     # 1.2 Time-dependent diffusion
-    out = "scientific_computing_set1/outputs/figures"
     # (E) Numerical vs analytic
     y_coords, data_list = run_comparison_simulation()
     plot_diffusion_numerical_vs_analytic(
@@ -119,34 +106,36 @@ def main():
     # Jacobi
     M = state_array(N_laplace)
     k = 0
-    errs = []
+    errs_jacobi = []
     while k < max_iter:
         k += 1
         M2 = jacobi_step(M)
         max_diff = np.max(np.abs(M2 - M))
-        errs.append(max_diff)
+        errs_jacobi.append(max_diff)
         if max_diff < conv_threshold:
             break
         M = M2
+    M_jacobi = np.copy(M)
     print(f"Jacobi converged after {k} steps")
     plot_state_array(M, title="Jacobi", savepath=f"{out}/jacobi.png")
-    plot_error(errs, title="Jacobi Error by iteration", savepath=f"{out}/jacobi_error.png")
+    plot_error(errs_jacobi, title="Jacobi Error by iteration", savepath=f"{out}/jacobi_error.png")
 
     # Gauss-Seidel
     M = state_array(N_laplace)
     k = 0
-    errs = []
+    errs_gauss_seidel = []
     while k < max_iter:
         k += 1
         M_old = np.copy(M)
         M = gauss_seidel_step(M)
         max_diff = np.max(np.abs(M - M_old))
-        errs.append(max_diff)
+        errs_gauss_seidel.append(max_diff)
         if max_diff < conv_threshold:
             break
+    M_gauss_seidel = np.copy(M)
     print(f"Gauss-Seidel converged after {k} steps")
     plot_state_array(M, title="Gauss-Seidel", savepath=f"{out}/gauss_seidel.png")
-    plot_error(errs, title="Gauss-Seidel Error by iteration", savepath=f"{out}/gauss_seidel_error.png")
+    plot_error(errs_gauss_seidel, title="Gauss-Seidel Error by iteration", savepath=f"{out}/gauss_seidel_error.png")
 
     # SOR for several omegas
     errs_sor = {}
@@ -182,6 +171,7 @@ def main():
         gs_errs.append(max_diff)
         if max_diff < conv_threshold:
             break
+    M_sor = np.copy(M)
     print(f"Successive Over Relaxation ($\\omega={gs_omega:.4f}$) converged after {k} steps")
     plot_state_array(M, title=f"Successive Over Relaxation, Optimal $\\omega={gs_omega:.4f}$", savepath=f"{out}/successive_over_relaxation_optimal.png")
 
@@ -196,6 +186,61 @@ def main():
     plt.legend()
     plt.savefig(f"{out}/successive_over_relaxation_error.png")
     plt.close()
+
+    plot_state_arrays(
+        [M_jacobi, M_gauss_seidel, M_sor],
+        titles=["Jacobi", "Gauss-Seidel", "Successive Over Relaxation"],
+        suptitle="Steady States by Method",
+        savepath=f"{out}/steady_state_arrays.png",
+    )
+
+    plot_convergence_rates(
+        errs_jacobi,
+        errs_gauss_seidel,
+        gs_errs,
+        conv_threshold,
+        errs_by_omega=errs_sor,
+        omegas=omegas,
+        gs_optimal_omega=gs_optimal_omega,
+        savepath=f"{out}/convergence_rates.png",
+    )
+
+    _, _, errs_r_sor = sor_iterations_with_history(
+        gs_optimal_omega, N=N_laplace, max_iter=max_iter, threshold=conv_threshold, random_seed=42
+    )
+    print(f"SOR with random initial state converged after {len(errs_r_sor)} steps")
+
+    M_r_jacobi = state_array(N_laplace, random_seed=42)
+    errs_r_jacobi = []
+    for _ in range(max_iter):
+        M_r_j2 = jacobi_step(M_r_jacobi)
+        errs_r_jacobi.append(np.max(np.abs(M_r_j2 - M_r_jacobi)))
+        M_r_jacobi = M_r_j2
+        if errs_r_jacobi[-1] < conv_threshold:
+            break
+    print(f"Jacobi with random initial state converged after {len(errs_r_jacobi)} steps")
+
+    M_r_gauss_seidel = state_array(N_laplace, random_seed=42)
+    errs_r_gauss_seidel = []
+    for _ in range(max_iter):
+        M_gs_old = np.copy(M_r_gauss_seidel)
+        M_r_gauss_seidel = gauss_seidel_step(M_r_gauss_seidel)
+        errs_r_gauss_seidel.append(np.max(np.abs(M_r_gauss_seidel - M_gs_old)))
+        if errs_r_gauss_seidel[-1] < conv_threshold:
+            break
+    print(f"Gauss-Seidel with random initial state converged after {len(errs_r_gauss_seidel)} steps")
+
+    plot_convergence_rates_random(
+        errs_r_jacobi,
+        errs_r_gauss_seidel,
+        errs_r_sor,
+        errs_jacobi,
+        errs_gauss_seidel,
+        gs_errs,
+        conv_threshold,
+        gs_optimal_omega=gs_optimal_omega,
+        savepath=f"{out}/convergence_rates_random.png",
+    )
 
     # Sweep over N: optimal omega and iterations vs N
     ns = [5, 20, 50, 100, 200]
@@ -294,6 +339,18 @@ def main():
         num_rects_list_opt,
         optimal_omegas_multiple,
         savepath=f"{out}/question_k_optimal_omega_sweeps.png",
+    )
+
+    # Concentration profiles (1D slice) over iterations — Jacobi, Gauss-Seidel, SOR
+    N_prof = 50
+    epsilon_prof = 1e-5
+    omega_sor = 1.9
+    _, _, profiles_jacobi = jacobi_iteration(N_prof, epsilon=epsilon_prof, M=None)
+    _, _, profiles_gauss = gauss_seidel_iteration(N_prof, epsilon=epsilon_prof, M=None)
+    _, _, profiles_sor = sor_iteration(N_prof, omega=omega_sor, epsilon=epsilon_prof, M=None)
+    plot_concentration_profiles(
+        profiles_jacobi, profiles_gauss, profiles_sor, N_prof,
+        savepath=f"{out}/concentration_profiles.png",
     )
 
 
