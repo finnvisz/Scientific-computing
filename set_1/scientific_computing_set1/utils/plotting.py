@@ -46,7 +46,7 @@ def finalize_wave_plot(fig, axes, cmap, norm, savepath=None):
     plt.show()
 
 def create_wave_animation(x, stored_i, stored_ii, stored_iii,
-                          titles=None, ylim=(-1, 1), interval=50, savepath=None):
+                          titles=None, ylim=(-1, 1), interval=150, savepath=None):
     """
     Create animation from stored wave frames.
 
