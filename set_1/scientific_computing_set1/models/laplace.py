@@ -1,7 +1,7 @@
 """
-Time-independent 2D diffusion / Laplace (1.3–1.6).
+Time-independent 2D diffusion / Laplace (1.3-1.6).
 Initial state (state_array), convergence threshold, SOR iteration count (sor_iterations).
-Migrated from time_independent.py as-is.
+
 """
 import numpy as np
 from scientific_computing_set1.solvers.iterative import successive_over_relaxation_step
@@ -9,16 +9,21 @@ from scientific_computing_set1.solvers.iterative import successive_over_relaxati
 conv_threshold = 1e-5
 
 
-def state_array(N):
-    """Initial grid: zeros with top row 1 (migrated from time_independent.py as-is)."""
+def state_array(N, random_seed=None):
+    """Initial grid: zeros with top row 1; optional random init. Full BCs: top=1, bottom=0, periodic sides."""
     M = np.zeros((N, N))
-    # all 1s where y=1
+    if random_seed is not None:
+        np.random.seed(random_seed)
+        M += np.random.uniform(0, 1, size=(N, N))
+    # boundary conditions (match time_independent.py)
     M[0, :] = 1
+    M[-1, :] = 0
+    M[:, 0] = M[:, -1]
     return M
 
 
 def sor_iterations(omega, N=50, max_iter=10000, threshold=conv_threshold):
-    """Run SOR with a given omega and return the number of iterations to converge (migrated as-is)."""
+    """Run SOR with a given omega and return the number of iterations to converge."""
     M = state_array(N)
     for k in range(1, max_iter + 1):
         M_old = np.copy(M)
@@ -26,6 +31,19 @@ def sor_iterations(omega, N=50, max_iter=10000, threshold=conv_threshold):
         if np.max(np.abs(M - M_old)) < threshold:
             return k
     return max_iter
+
+def sor_iterations_with_history(omega, N=50, max_iter=10000, threshold=conv_threshold, random_seed=None):
+    """Run SOR with a given omega; return (M, k, errs) for convergence-rate plotting and random-init runs."""
+    M = state_array(N, random_seed=random_seed)
+    errs = []
+    for k in range(1, max_iter + 1):
+        M_old = np.copy(M)
+        M = successive_over_relaxation_step(M, omega)
+        err = np.max(np.abs(M - M_old))
+        errs.append(err)
+        if err < threshold:
+            return M, k, errs
+    return M, max_iter, errs
 
 # Objects in the computational domain:
 def objects_in_cntr(N, y_tolerance, x_tolerance):
@@ -89,7 +107,7 @@ def rectangles_for_count(N, num_rects):
 def initialize_concentration_field(N):
     """
     Initialize concentration field with boundary conditions.
-    c[:, 0] = 0 (bottom), c[:, N-1] = 1 (top). Used by jacobi/gauss_seidel/sor_iteration below.
+    c[:, 0] = 0 (bottom), c[:, N-1] = 1 (top).
     """
     c = np.zeros((N, N))
     c[:, 0] = 0      # bottom boundary (y=0)

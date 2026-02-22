@@ -2,14 +2,12 @@
 Iterative solvers for the 2D Laplace equation (steady-state diffusion).
 Jacobi, Gauss-Seidel, and SOR (Successive Over-Relaxation).
 """
-# TODO: move from notebook: jacobi_iteration, gauss_seidel_iteration, sor_iteration
-# Optional object mask M (M[i,j]==1 -> concentration 0). Return (iterations, final_state, profiles).
 
 import numpy as np
 
 
 def jacobi_step(M):
-    """One Jacobi step (migrated from time_independent.py as-is)."""
+    """One Jacobi step."""
     new_M = np.copy(M)
     N = M.shape[0]
     for i in range(1, N-1):
@@ -18,7 +16,7 @@ def jacobi_step(M):
 
 
 def gauss_seidel_step(M):
-    """One Gauss-Seidel step (migrated from time_independent.py as-is)."""
+    """One Gauss-Seidel step."""
     N = M.shape[0]
     for i in range(1, N-1):
         for j in range(N):
@@ -27,7 +25,7 @@ def gauss_seidel_step(M):
 
 
 def successive_over_relaxation_step(M, omega):
-    """One SOR step (migrated from time_independent.py as-is)."""
+    """One SOR step."""
     N = M.shape[0]
     for i in range(1, N-1):
         for j in range(N):

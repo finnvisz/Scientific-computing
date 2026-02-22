@@ -1,12 +1,11 @@
 """
 Convergence testing utilities (e.g. golden section search for optimal omega).
-Migrated from time_independent.py as-is.
 """
 import numpy as np
 
 
 def golden_section_search(f, a, b, tol=1e-3, iter=0, max_iter=100, f_args=(), c=None, d=None, fc=None, fd=None):
-    """Find the value of x in [a, b] that minimizes f(x) using recursive golden section search (migrated as-is)."""
+    """Find the value of x in [a, b] that minimizes f(x) using recursive golden section search."""
     if iter >= max_iter:
         print("Maximum iterations reached in golden section search")
         return (a + b) / 2
