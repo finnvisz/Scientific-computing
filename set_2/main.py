@@ -3,14 +3,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.sparse.linalg import spsolve
 
-from set_2.models.DLA import (
+from models.DLA import (
     DLA,
     solve_laplace,
     find_growth_candidates,
     add_candidates
 )
 
-from set_2.models.Gray_Scott import (
+from models.Gray_Scott import (
     grid_initialization,
     A_matrix,
     b_vector
@@ -18,6 +18,11 @@ from set_2.models.Gray_Scott import (
 
 def main():
     """Run all assignment questions."""
+
+    ######################
+    ###### 2.1 DLA #######
+    ######################
+
     # Plot the growth for different values of eta
     size=100
     etas = [0.2, 0.5, 1, 1.5, 2]
@@ -71,8 +76,9 @@ def main():
     plt.grid(True, which="both", ls="-", alpha=0.5)
     plt.savefig("result_stats_omega.png")
 
-
-    # Question 2.3 The Gray-Scott Model - A reaction-diffusion system
+    ##########################
+    ## 2.3 Gray-Scott model ##
+    ##########################
 
     # Parameters
     dx = 1.0
