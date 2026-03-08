@@ -41,30 +41,98 @@ def grid_initialization(N, y_tolerance, x_tolerance, u_initial, v_initial):
 
     return u_grid, v_grid
 
-def A_matrix(N, alpha):
+def A_matrix(grid_size, sigma):
+    """
+    Construct the sparse matrix A for the Crank-Nicolson scheme with periodic boundaries.
+    
+    The matrix implements a 5-point stencil for the 2D Laplacian with periodic boundary
+    conditions. Each row corresponds to one grid point and contains 5 non-zero entries:
+    - Diagonal entry: (1 + 2·σ)
+    - Four neighbors: -σ/2 each
+    
+    Parameters
+    ----------
+    grid_size : int
+        Number of grid points in each direction (N·N grid)
+    sigma : float
+        Diffusion parameter σ = D·Δt/Δx²
+        
+    Returns
+    -------
+    scipy.sparse.csc_matrix
+        Sparse matrix A of size (N²·N²) in CSC format
+        
+    Example
+    -------
+    >>> A = build_crank_nicolson_matrix(50, 0.16)
+    >>> A.shape
+    (2500, 2500)
+    """
+    N = grid_size
     N_total = N * N
+    
+    # Use LIL format for efficient construction
     A = lil_matrix((N_total, N_total))
-
+    
+    # Loop over all grid points
     for i in range(N):
         for j in range(N):
-            k_index = i * N + j
-            jp1, jm1 = (j + 1) % N, (j - 1) % N
-            ip1, im1 = (i + 1) % N, (i - 1) % N
-            k_right = i * N + jp1
-            k_left = i * N + jm1
-            k_down = ip1 * N + j
-            k_up = im1 * N + j
-
-            A[k_index, k_index] = 1 + 2 * alpha
-            A[k_index, k_right] = -alpha / 2
-            A[k_index, k_left] = -alpha / 2
-            A[k_index, k_down] = -alpha / 2
-            A[k_index, k_up] = -alpha / 2
-
-    A = A.tocsc()
-    return A
+            # Current point's flattened index
+            k_center = i * N + j
+            
+            # Compute periodic neighbor indices in 2D
+            j_right = (j + 1) % N
+            j_left = (j - 1) % N
+            i_down = (i + 1) % N
+            i_up = (i - 1) % N
+            
+            # Convert neighbor indices to flattened 1D indices
+            k_right = i * N + j_right
+            k_left = i * N + j_left
+            k_down = i_down * N + j
+            k_up = i_up * N + j
+            
+            # Fill matrix row k with 5-point stencil coefficients
+            A[k_center, k_center] = 1 + 2 * sigma      # Center (diagonal)
+            A[k_center, k_right] = -sigma / 2          # Right neighbor
+            A[k_center, k_left] = -sigma / 2           # Left neighbor
+            A[k_center, k_down] = -sigma / 2           # Down neighbor
+            A[k_center, k_up] = -sigma / 2             # Up neighbor
+    
+    # Convert to CSC format for efficient sparse linear algebra
+    return A.tocsc()
 
 def b_vector(N, alpha, dt, f, k, u_profile, v_profile, U=True):
+    """
+    Construct the right-hand side vector b for the Crank-Nicolson scheme with periodic boundaries.
+    
+    The vector implements a 5-point stencil for the 2D Laplacian with periodic boundary
+    conditions. Each entry corresponds to one grid point and contains 5 non-zero entries:
+    - Diagonal entry: (1 + 2·σ)
+    - Four neighbors: -σ/2 each
+    
+    Parameters
+    ----------
+    N : int
+        Number of grid points in each direction (N·N grid)
+    sigma : float
+        Diffusion parameter σ = D·Δt/Δx²
+    dt : float
+        Time step
+    f : float
+    k : float
+        Rate constant for the reaction
+    u_profile : 2D array of shape NxN
+        U concentration profile
+    v_profile : 2D array of shape NxN
+        V concentration profile
+    U : bool
+        True if U is the target chemical, False if V is the target chemical
+    Returns
+    -------
+    b : 1D array of shape N²·N²
+        Right-hand side vector b of size (N²·N²) in CSC format
+    """
     N_total = N * N
     b = np.zeros(N_total)
 
