@@ -3,7 +3,6 @@
 import numpy as np
 from scipy.sparse import lil_matrix
 
-
 def grid_initialization(N, y_tolerance, x_tolerance, u_initial, v_initial):
     """
     Initializes values in the computational domain, with the U concentration everywhere, with the exception of 
@@ -35,62 +34,129 @@ def grid_initialization(N, y_tolerance, x_tolerance, u_initial, v_initial):
     v_grid[(N//2) - y_tolerance :(N//2) + y_tolerance, (N//2) - x_tolerance :N//2 + x_tolerance] = v_initial
     
 
-    # Small noise helps patterns develop
+    # Small amount of random noise
     u_grid += 0.01 * np.random.randn(N, N)
     v_grid += 0.01 * np.random.randn(N, N)
 
     return u_grid, v_grid
 
-def A_matrix(N, alpha):
-
+def A_matrix(grid_size, sigma):
+    """
+    Construct the sparse matrix A for the Crank-Nicolson scheme with periodic boundaries.
+    
+    The matrix implements a 5-point stencil for the 2D Laplacian with periodic boundary
+    conditions. Each row corresponds to one grid point and contains 5 non-zero entries:
+    - Diagonal entry: (1 + 2·σ)
+    - Four neighbors: -σ/2 each
+    
+    Parameters
+    ----------
+    grid_size : int
+        Number of grid points in each direction (N·N grid)
+    sigma : float
+        Diffusion parameter σ = D·Δt/Δx²
+        
+    Returns
+    -------
+    scipy.sparse.csc_matrix
+        Sparse matrix A of size (N²·N²) in CSC format
+        
+    Example
+    -------
+    >>> A = build_crank_nicolson_matrix(50, 0.16)
+    >>> A.shape
+    (2500, 2500)
+    """
+    N = grid_size
     N_total = N * N
+    
+    # Use LIL format for efficient construction
     A = lil_matrix((N_total, N_total))
-
+    
+    # Loop over all grid points
     for i in range(N):
         for j in range(N):
-            k_index = i * N + j
-
-            if i > 0 and i < N-1 and j > 0 and j < N-1:
-                A[k_index, k_index] = 1 + 2 * alpha
-                A[k_index, k_index + 1] = -alpha/2
-                A[k_index, k_index - 1] = -alpha/2
-                A[k_index, k_index + N] = -alpha/2
-                A[k_index, k_index - N] = -alpha/2
+            # Current point's flattened index
+            k_center = i * N + j
             
-            else:
-                A[k_index, k_index] = 1  # Identity: u_new[boundary] = u_old[boundary]
-
-    A = A.tocsc() # Converts to Compressed Sparse Column (CSC) format for efficient linear algebra operations
-
-    return A
+            # Compute periodic neighbor indices in 2D
+            j_right = (j + 1) % N
+            j_left = (j - 1) % N
+            i_down = (i + 1) % N
+            i_up = (i - 1) % N
+            
+            # Convert neighbor indices to flattened 1D indices
+            k_right = i * N + j_right
+            k_left = i * N + j_left
+            k_down = i_down * N + j
+            k_up = i_up * N + j
+            
+            # Fill matrix row k with 5-point stencil coefficients
+            A[k_center, k_center] = 1 + 2 * sigma      # Center (diagonal)
+            A[k_center, k_right] = -sigma / 2          # Right neighbor
+            A[k_center, k_left] = -sigma / 2           # Left neighbor
+            A[k_center, k_down] = -sigma / 2           # Down neighbor
+            A[k_center, k_up] = -sigma / 2             # Up neighbor
+    
+    # Convert to CSC format for efficient sparse linear algebra
+    return A.tocsc()
 
 def b_vector(N, alpha, dt, f, k, u_profile, v_profile, U=True):
-
+    """
+    Construct the right-hand side vector b for the Crank-Nicolson scheme with periodic boundaries.
+    
+    The vector implements a 5-point stencil for the 2D Laplacian with periodic boundary
+    conditions. Each entry corresponds to one grid point and contains 5 non-zero entries:
+    - Diagonal entry: (1 + 2·σ)
+    - Four neighbors: -σ/2 each
+    
+    Parameters
+    ----------
+    N : int
+        Number of grid points in each direction (N·N grid)
+    sigma : float
+        Diffusion parameter σ = D·Δt/Δx²
+    dt : float
+        Time step
+    f : float
+    k : float
+        Rate constant for the reaction
+    u_profile : 2D array of shape NxN
+        U concentration profile
+    v_profile : 2D array of shape NxN
+        V concentration profile
+    U : bool
+        True if U is the target chemical, False if V is the target chemical
+    Returns
+    -------
+    b : 1D array of shape N²·N²
+        Right-hand side vector b of size (N²·N²) in CSC format
+    """
     N_total = N * N
     b = np.zeros(N_total)
 
     for i in range(N):
         for j in range(N):
             k_index = i * N + j
+            jp1, jm1 = (j + 1) % N, (j - 1) % N
+            ip1, im1 = (i + 1) % N, (i - 1) % N
 
-            if i > 0 and i < N-1 and j > 0 and j < N-1:
-                if U:
-                    diffusion_term = (u_profile[i,j] *(1 - 2 * alpha)) + (alpha/2) * (u_profile[i+1,j] + u_profile[i-1,j] + u_profile[i,j+1] + u_profile[i,j-1])
-                    reaction_term = dt * (- u_profile[i,j] * (v_profile[i,j])**2 + f * (1 - u_profile[i,j]))
-
-                    b[k_index] = diffusion_term + reaction_term
-
-                else:
-                    diffusion_term = (v_profile[i,j] *(1 - 2 * alpha)) + (alpha/2) * (v_profile[i+1,j] + v_profile[i-1,j] + v_profile[i,j+1] + v_profile[i,j-1])
-                    reaction_term = dt * (u_profile[i,j] * (v_profile[i,j])**2 - (f + k) * v_profile[i,j])
-
-                b[k_index] = diffusion_term + reaction_term
-            
+            if U:
+                diffusion_term = (u_profile[i, j] * (1 - 2 * alpha)) + (alpha / 2) * (
+                    u_profile[ip1, j] + u_profile[im1, j] + u_profile[i, jp1] + u_profile[i, jm1]
+                )
+                reaction_term = dt * (
+                    -u_profile[i, j] * (v_profile[i, j]) ** 2 + f * (1 - u_profile[i, j])
+                )
             else:
-                if U:
-                    b[k_index] = u_profile[i,j]
-                else:
-                    b[k_index] = v_profile[i,j]
+                diffusion_term = (v_profile[i, j] * (1 - 2 * alpha)) + (alpha / 2) * (
+                    v_profile[ip1, j] + v_profile[im1, j] + v_profile[i, jp1] + v_profile[i, jm1]
+                )
+                reaction_term = dt * (
+                    u_profile[i, j] * (v_profile[i, j]) ** 2 - (f + k) * v_profile[i, j]
+                )
+
+            b[k_index] = diffusion_term + reaction_term
 
     return b
 
