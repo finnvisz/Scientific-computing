@@ -169,10 +169,14 @@ fig_hm.suptitle("Monte Carlo DLA Heatmaps (n=20)", fontsize=16)
 
 for idx, p_s in enumerate(p_s_values):
     heatmap = np.zeros((grid_size, grid_size), dtype=np.float64)
+    avg_steps = 0
     for _ in tqdm(range(20), desc=f"Running DLA simulations (p_s={p_s})"):
-        result, _, _ = monte_carlo_dla(make_seed(grid_size, 3), target=500, p_s=p_s)
+        result, _, steps = monte_carlo_dla(make_seed(grid_size, 3), target=500, p_s=p_s)
+        avg_steps += steps
         heatmap += (result > 0).astype(np.float64)
     heatmap /= 20
+    avg_steps /= 20
+    print(f"\nAverage steps for p_s={p_s}: {avg_steps}")
     heatmaps.append(heatmap)
 
     ax = axes_hm[idx]
