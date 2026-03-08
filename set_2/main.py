@@ -120,10 +120,10 @@ def main():
             spine.set_linewidth(1)
 
         animate_dla(seed, stick_positions, title=f"Monte Carlo DLA Animation, $p_s={p_s}$",
-                    filename=f"set_2/outputs/mc_dla_{str(p_s).replace('.', '_')}.gif")
+                    filename=f"{out}/mc_dla_{str(p_s).replace('.', '_')}.gif")
 
     fig_dla.tight_layout()
-    fig_dla.savefig("set_2/outputs/mc_dla.pdf", bbox_inches='tight')
+    fig_dla.savefig(f"{out}/mc_dla.pdf", bbox_inches='tight')
     plt.close(fig_dla)
 
     # Generate heatmaps
@@ -133,10 +133,14 @@ def main():
 
     for idx, p_s in enumerate(p_s_values):
         heatmap = np.zeros((grid_size, grid_size), dtype=np.float64)
+        avg_steps = 0
         for _ in tqdm(range(20), desc=f"Running DLA simulations (p_s={p_s})"):
-            result, _, _ = monte_carlo_dla(make_seed(grid_size, 3), target=500, p_s=p_s)
+            result, _, steps = monte_carlo_dla(make_seed(grid_size, 3), target=500, p_s=p_s)
+            avg_steps += steps
             heatmap += (result > 0).astype(np.float64)
         heatmap /= 20
+        avg_steps /= 20
+        print(f"\nAverage steps for p_s={p_s}: {avg_steps}")
         heatmaps.append(heatmap)
 
         ax = axes_hm[idx]
@@ -149,7 +153,7 @@ def main():
             spine.set_linewidth(1)
 
     fig_hm.tight_layout()
-    fig_hm.savefig("set_2/outputs/mc_heatmap.pdf", bbox_inches='tight')
+    fig_hm.savefig(f"{out}/mc_heatmap.pdf", bbox_inches='tight')
     plt.close(fig_hm)
 
 
