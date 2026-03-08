@@ -35,62 +35,61 @@ def grid_initialization(N, y_tolerance, x_tolerance, u_initial, v_initial):
     v_grid[(N//2) - y_tolerance :(N//2) + y_tolerance, (N//2) - x_tolerance :N//2 + x_tolerance] = v_initial
     
 
-    # Small noise helps patterns develop
+    # Small amount of random noise
     u_grid += 0.01 * np.random.randn(N, N)
     v_grid += 0.01 * np.random.randn(N, N)
 
     return u_grid, v_grid
 
 def A_matrix(N, alpha):
-
     N_total = N * N
     A = lil_matrix((N_total, N_total))
 
     for i in range(N):
         for j in range(N):
             k_index = i * N + j
+            jp1, jm1 = (j + 1) % N, (j - 1) % N
+            ip1, im1 = (i + 1) % N, (i - 1) % N
+            k_right = i * N + jp1
+            k_left = i * N + jm1
+            k_down = ip1 * N + j
+            k_up = im1 * N + j
 
-            if i > 0 and i < N-1 and j > 0 and j < N-1:
-                A[k_index, k_index] = 1 + 2 * alpha
-                A[k_index, k_index + 1] = -alpha/2
-                A[k_index, k_index - 1] = -alpha/2
-                A[k_index, k_index + N] = -alpha/2
-                A[k_index, k_index - N] = -alpha/2
-            
-            else:
-                A[k_index, k_index] = 1  # Identity: u_new[boundary] = u_old[boundary]
+            A[k_index, k_index] = 1 + 2 * alpha
+            A[k_index, k_right] = -alpha / 2
+            A[k_index, k_left] = -alpha / 2
+            A[k_index, k_down] = -alpha / 2
+            A[k_index, k_up] = -alpha / 2
 
-    A = A.tocsc() # Converts to Compressed Sparse Column (CSC) format for efficient linear algebra operations
-
+    A = A.tocsc()
     return A
 
 def b_vector(N, alpha, dt, f, k, u_profile, v_profile, U=True):
-
     N_total = N * N
     b = np.zeros(N_total)
 
     for i in range(N):
         for j in range(N):
             k_index = i * N + j
+            jp1, jm1 = (j + 1) % N, (j - 1) % N
+            ip1, im1 = (i + 1) % N, (i - 1) % N
 
-            if i > 0 and i < N-1 and j > 0 and j < N-1:
-                if U:
-                    diffusion_term = (u_profile[i,j] *(1 - 2 * alpha)) + (alpha/2) * (u_profile[i+1,j] + u_profile[i-1,j] + u_profile[i,j+1] + u_profile[i,j-1])
-                    reaction_term = dt * (- u_profile[i,j] * (v_profile[i,j])**2 + f * (1 - u_profile[i,j]))
-
-                    b[k_index] = diffusion_term + reaction_term
-
-                else:
-                    diffusion_term = (v_profile[i,j] *(1 - 2 * alpha)) + (alpha/2) * (v_profile[i+1,j] + v_profile[i-1,j] + v_profile[i,j+1] + v_profile[i,j-1])
-                    reaction_term = dt * (u_profile[i,j] * (v_profile[i,j])**2 - (f + k) * v_profile[i,j])
-
-                b[k_index] = diffusion_term + reaction_term
-            
+            if U:
+                diffusion_term = (u_profile[i, j] * (1 - 2 * alpha)) + (alpha / 2) * (
+                    u_profile[ip1, j] + u_profile[im1, j] + u_profile[i, jp1] + u_profile[i, jm1]
+                )
+                reaction_term = dt * (
+                    -u_profile[i, j] * (v_profile[i, j]) ** 2 + f * (1 - u_profile[i, j])
+                )
             else:
-                if U:
-                    b[k_index] = u_profile[i,j]
-                else:
-                    b[k_index] = v_profile[i,j]
+                diffusion_term = (v_profile[i, j] * (1 - 2 * alpha)) + (alpha / 2) * (
+                    v_profile[ip1, j] + v_profile[im1, j] + v_profile[i, jp1] + v_profile[i, jm1]
+                )
+                reaction_term = dt * (
+                    u_profile[i, j] * (v_profile[i, j]) ** 2 - (f + k) * v_profile[i, j]
+                )
+
+            b[k_index] = diffusion_term + reaction_term
 
     return b
 
