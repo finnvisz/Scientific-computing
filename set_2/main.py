@@ -90,7 +90,7 @@ def main():
     D_u = 0.16
     D_v = 0.08
     N = 128
-    max_steps = 1000
+    max_steps = 5000
     plot_steps = [500, 1000, 2500, 5000]
 
     # (f, k, label) for each run; label used in saved filename
