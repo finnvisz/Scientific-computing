@@ -17,16 +17,19 @@ def monte_carlo_dla(grid: np.ndarray, target: int, p_s: float = 1) -> tuple:
     -------
     final_grid      : (n, n) int64 — final state of the grid
     stick_positions : (target, 2) int16 — (row, col) of each stuck particle in order
+    steps           : int — number of steps taken
     """
     grid = grid.copy()
     n = grid.shape[0]
     stuck = 0
     active_walker = False
     walker_row, walker_col = 0, 0
+    steps = 0
 
     stick_positions = np.empty((target, 2), dtype=np.int16)
 
     while stuck < target:
+        steps += 1
         if not active_walker:
             walker_row = 0
             walker_col = np.random.randint(0, n)
@@ -62,7 +65,7 @@ def monte_carlo_dla(grid: np.ndarray, target: int, p_s: float = 1) -> tuple:
             continue
 
         walker_row, walker_col = nr, nc
-
+    
         # Stick if adjacent to cluster
         if ((walker_row > 0 and grid[walker_row - 1, walker_col]) or
                 grid[(walker_row + 1) % n, walker_col] or
@@ -75,21 +78,20 @@ def monte_carlo_dla(grid: np.ndarray, target: int, p_s: float = 1) -> tuple:
                 stuck += 1
                 active_walker = False
 
-    return grid, stick_positions
+    return grid, stick_positions, steps
 
 
-def animate_dla(seed: np.ndarray, sim_results: tuple, duration: float = 10,
+def animate_dla(seed: np.ndarray, stick_positions: np.ndarray, duration: float = 10,
                 title: str = "", filename: str = None) -> None:
     """Animate a DLA simulation, showing one frame per stick event.
 
     Parameters
     ----------
     seed        : initial grid passed to monte_carlo_dla
-    sim_results : tuple returned by monte_carlo_dla
+    stick_positions : (target, 2) int16 — (row, col) of each stuck particle in order
     duration    : target animation length in seconds
     filename    : if given, save to file instead of displaying
     """
-    _, stick_positions = sim_results
     target = len(stick_positions)
     interval_ms = duration * 1000 / target
 
@@ -104,7 +106,7 @@ def animate_dla(seed: np.ndarray, sim_results: tuple, duration: float = 10,
     ax.axis('off')
     if title:
         ax.set_title(title)
-    im = ax.imshow(seed, cmap='grey', vmin=0, vmax=2)
+    im = ax.imshow(seed, cmap='gray_r', vmin=0, vmax=2)
 
     def update(frame):
         im.set_data(frame)
@@ -124,12 +126,12 @@ def run_heatmap(grid_size: int, seed_size: int, target: int, n_runs: int,
     """Run the DLA simulation n_runs times and plot a heatmap of particle frequency."""
     heatmap = np.zeros((grid_size, grid_size), dtype=np.float64)
     for _ in tqdm(range(n_runs), desc=f"Running DLA simulations (p_s={p_s})"):
-        result, _ = monte_carlo_dla(make_seed(grid_size, seed_size), target=target, p_s=p_s)
+        result, _, _ = monte_carlo_dla(make_seed(grid_size, seed_size), target=target, p_s=p_s)
         heatmap += (result > 0).astype(np.float64)
     heatmap /= n_runs
 
     plt.figure()
-    plt.imshow(heatmap, cmap='hot', vmin=0, vmax=1)
+    plt.imshow(heatmap, cmap='gray_r', vmin=0, vmax=1)
     plt.colorbar().remove()
     plt.title(title or f"Monte Carlo DLA Heatmap (p_s={p_s}, n={n_runs})")
     plt.axis('off')
@@ -151,33 +153,48 @@ def make_seed(grid_size: int, seed_size: int) -> np.ndarray:
 grid_size = 100
 
 seed = make_seed(grid_size, 3)
-sim = monte_carlo_dla(seed, target=500)
-plt.imshow(sim[0], cmap='grey')
+sim, stick_positions, steps = monte_carlo_dla(seed, target=500)
+print(f"Monte Carlo DLA with p_s=1.0 took {steps} steps to reach 500 particles.")
+plt.imshow(sim, cmap='gray_r')
 plt.title("Monte Carlo DLA Cluster $p_s=1.0$")
 plt.axis('off')
 plt.colorbar().remove()
 plt.savefig("set_2/outputs/mc_dla_1_0.png", bbox_inches='tight')
-animate_dla(seed, sim, title="Monte Carlo DLA Animation, $p_s=1.0$", filename="set_2/outputs/mc_dla_1_0.gif")
+animate_dla(seed, stick_positions, title="Monte Carlo DLA Animation, $p_s=1.0$", filename="set_2/outputs/mc_dla_1_0.gif")
 
 seed = make_seed(grid_size, 3)
-sim = monte_carlo_dla(seed, target=500, p_s=0.3)
-plt.imshow(sim[0], cmap='grey')
-plt.title("Monte Carlo DLA Cluster $p_s=0.3$")
+sim, stick_positions, steps = monte_carlo_dla(seed, target=500, p_s=0.5)
+print(f"Monte Carlo DLA with p_s=0.5 took {steps} steps to reach 500 particles.")
+plt.imshow(sim, cmap='gray_r')
+plt.title("Monte Carlo DLA Cluster $p_s=0.5$")
 plt.axis('off')
 plt.colorbar().remove()
-plt.savefig("set_2/outputs/mc_dla_0_3.png", bbox_inches='tight')
-animate_dla(seed, sim, title="Monte Carlo DLA Animation, $p_s=0.3$", filename="set_2/outputs/mc_dla_0_3.gif")
+plt.savefig("set_2/outputs/mc_dla_0_5.png", bbox_inches='tight')
+animate_dla(seed, stick_positions, title="Monte Carlo DLA Animation, $p_s=0.5$", filename="set_2/outputs/mc_dla_0_5.gif")
+
 
 seed = make_seed(grid_size, 3)
-sim = monte_carlo_dla(seed, target=500, p_s=0.01)
-plt.imshow(sim[0], cmap='grey')
+sim, stick_positions, steps = monte_carlo_dla(seed, target=500, p_s=0.2)
+print(f"Monte Carlo DLA with p_s=0.2 took {steps} steps to reach 500 particles.")
+plt.imshow(sim, cmap='gray_r')
+plt.title("Monte Carlo DLA Cluster $p_s=0.2$")
+plt.axis('off')
+plt.colorbar().remove()
+plt.savefig("set_2/outputs/mc_dla_0_2.png", bbox_inches='tight')
+animate_dla(seed, stick_positions, title="Monte Carlo DLA Animation, $p_s=0.2$", filename="set_2/outputs/mc_dla_0_2.gif")
+
+seed = make_seed(grid_size, 3)
+sim, stick_positions, steps = monte_carlo_dla(seed, target=500, p_s=0.01)
+print(f"Monte Carlo DLA with p_s=0.01 took {steps} steps to reach 500 particles.")
+plt.imshow(sim, cmap='gray_r')
 plt.title("Monte Carlo DLA Cluster $p_s=0.01$")
 plt.axis('off')
 plt.colorbar().remove()
 plt.savefig("set_2/outputs/mc_dla_0_01.png", bbox_inches='tight')
-animate_dla(seed, sim, title="Monte Carlo DLA Animation, $p_s=0.01$", filename="set_2/outputs/mc_dla_0_01.gif")
+animate_dla(seed, stick_positions, title="Monte Carlo DLA Animation, $p_s=0.01$", filename="set_2/outputs/mc_dla_0_01.gif")
 
 run_heatmap(grid_size, seed_size=3, target=500, n_runs=20, p_s=1.0, title="Monte Carlo DLA Heatmap, $p_s=1.0$", filename="set_2/outputs/mc_heatmap_1_0.png")
-run_heatmap(grid_size, seed_size=3, target=500, n_runs=20, p_s=0.3, title="Monte Carlo DLA Heatmap, $p_s=0.3$", filename="set_2/outputs/mc_heatmap_0_3.png")
+run_heatmap(grid_size, seed_size=3, target=500, n_runs=20, p_s=0.5, title="Monte Carlo DLA Heatmap, $p_s=0.5$", filename="set_2/outputs/mc_heatmap_0_5.png")
+run_heatmap(grid_size, seed_size=3, target=500, n_runs=20, p_s=0.2, title="Monte Carlo DLA Heatmap, $p_s=0.2$", filename="set_2/outputs/mc_heatmap_0_2.png")
 run_heatmap(grid_size, seed_size=3, target=500, n_runs=20, p_s=0.01, title="Monte Carlo DLA Heatmap, $p_s=0.01$", filename="set_2/outputs/mc_heatmap_0_01.png")
 

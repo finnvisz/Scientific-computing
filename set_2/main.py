@@ -4,14 +4,14 @@ import matplotlib.pyplot as plt
 from scipy.sparse.linalg import spsolve
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-from set_2.models.DLA import (
+from models.DLA import (
     DLA,
     solve_laplace,
     find_growth_candidates,
     add_candidates
 )
 
-from set_2.models.Gray_Scott import (
+from models.Gray_Scott import (
     grid_initialization,
     A_matrix,
     b_vector
@@ -19,16 +19,25 @@ from set_2.models.Gray_Scott import (
 
 def main():
     """Run all assignment questions."""
+    out = "set_2/outputs"
+
+    ######################
+    ###### 2.1 DLA #######
+    ######################
+
     # Plot the growth for different values of eta
-    size=100
-    etas = [0.2, 0.5, 1, 1.5, 2]
-    iterations=1000
+    size = 100
+    etas = [0, 0.2, 0.5, 1, 1.5, 2, 3, 5, 7, 10]
+    iterations = 1000
     omega = 1.7
 
-    fig, axes = plt.subplots(1, len(etas), figsize=(5*len(etas), 5))
+    rows, cols = 2, 5
+    fig, axes = plt.subplots(rows, cols, figsize=(20, 10))
+    axes_flat = axes.flatten()
 
-    for ax, eta in zip(axes, etas):
-        result = DLA(size=100, iterations=iterations, eta=eta, omega=omega)
+    for i, eta in enumerate(etas):
+        ax = axes_flat[i]
+        result = DLA(size=size, iterations=iterations, eta=eta, omega=omega)
         
         ax.imshow(result, cmap='Blues')
         ax.set_title(f"η={eta}", fontsize=25)
@@ -38,7 +47,7 @@ def main():
 
     # Find optimal omega
     omegas = np.arange(1.0, 2.0, 0.05)
-    num_trials = 1  # How many full DLA growths to run per omega
+    num_trials = 1  # How many full DLA growths to run per omega (for now set to 1 to decrease runtime)
     results_stats = {}
 
     for w in omegas:
@@ -72,8 +81,9 @@ def main():
     plt.grid(True, which="both", ls="-", alpha=0.5)
     plt.savefig('set_2/result_stats_omega.png')
 
-
-    # Question 2.3 The Gray-Scott Model - A reaction-diffusion system
+    ##########################
+    ## 2.3 Gray-Scott model ##
+    ##########################
 
     dx = 1.0
     dt = 1.0
@@ -140,7 +150,6 @@ def main():
         plt.tight_layout()
         plt.savefig(f'set_2/gray_scott_concentration_profiles_{label}.png')
         plt.show()
-
 
 
 if __name__ == "__main__":
