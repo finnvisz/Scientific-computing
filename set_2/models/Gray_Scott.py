@@ -2,6 +2,7 @@
 
 import numpy as np
 from scipy.sparse import lil_matrix
+from numba import jit
 
 def grid_initialization(N, y_tolerance, x_tolerance, u_initial, v_initial):
     """
@@ -60,12 +61,6 @@ def A_matrix(grid_size, sigma):
     -------
     scipy.sparse.csc_matrix
         Sparse matrix A of size (N²·N²) in CSC format
-        
-    Example
-    -------
-    >>> A = build_crank_nicolson_matrix(50, 0.16)
-    >>> A.shape
-    (2500, 2500)
     """
     N = grid_size
     N_total = N * N
@@ -114,7 +109,7 @@ def b_vector(N, alpha, dt, f, k, u_profile, v_profile, U=True):
     ----------
     N : int
         Number of grid points in each direction (N·N grid)
-    sigma : float
+    alpha : float
         Diffusion parameter σ = D·Δt/Δx²
     dt : float
         Time step
@@ -132,33 +127,23 @@ def b_vector(N, alpha, dt, f, k, u_profile, v_profile, U=True):
     b : 1D array of shape N²·N²
         Right-hand side vector b of size (N²·N²) in CSC format
     """
-    N_total = N * N
-    b = np.zeros(N_total)
+    u_up = np.roll(u_profile, 1, axis=0)
+    u_down = np.roll(u_profile, -1, axis=0)
+    u_left = np.roll(u_profile, 1, axis=1)
+    u_right = np.roll(u_profile, -1, axis=1)
+    v_up = np.roll(v_profile, 1, axis=0)
+    v_down = np.roll(v_profile, -1, axis=0)
+    v_left = np.roll(v_profile, 1, axis=1)
+    v_right = np.roll(v_profile, -1, axis=1)
 
-    for i in range(N):
-        for j in range(N):
-            k_index = i * N + j
-            jp1, jm1 = (j + 1) % N, (j - 1) % N
-            ip1, im1 = (i + 1) % N, (i - 1) % N
+    if U:
+        diffusion = u_profile * (1 - 2 * alpha) + (alpha / 2) * (u_up + u_down + u_left + u_right)
+        reaction = dt * (-u_profile * v_profile**2 + f * (1 - u_profile))
+    else:
+        diffusion = v_profile * (1 - 2 * alpha) + (alpha / 2) * (v_up + v_down + v_left + v_right)
+        reaction = dt * (u_profile * v_profile**2 - (f + k) * v_profile)
 
-            if U:
-                diffusion_term = (u_profile[i, j] * (1 - 2 * alpha)) + (alpha / 2) * (
-                    u_profile[ip1, j] + u_profile[im1, j] + u_profile[i, jp1] + u_profile[i, jm1]
-                )
-                reaction_term = dt * (
-                    -u_profile[i, j] * (v_profile[i, j]) ** 2 + f * (1 - u_profile[i, j])
-                )
-            else:
-                diffusion_term = (v_profile[i, j] * (1 - 2 * alpha)) + (alpha / 2) * (
-                    v_profile[ip1, j] + v_profile[im1, j] + v_profile[i, jp1] + v_profile[i, jm1]
-                )
-                reaction_term = dt * (
-                    u_profile[i, j] * (v_profile[i, j]) ** 2 - (f + k) * v_profile[i, j]
-                )
-
-            b[k_index] = diffusion_term + reaction_term
-
-    return b
+    return (diffusion + reaction).ravel()
 
 
 
