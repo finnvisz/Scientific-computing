@@ -90,9 +90,9 @@ def main():
     plt.grid(True, which="both", ls="-", alpha=0.5)
     plt.savefig(f'{out}/result_stats_omega.png')
 
-    ##########################
+    ###########################
     ## 2.2 Monte Carlo model ##
-    ##########################
+    ###########################
 
     grid_size = 100
     p_s_values = [1.0, 0.5, 0.2, 0.01]
