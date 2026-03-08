@@ -97,7 +97,7 @@ def animate_dla(seed: np.ndarray, stick_positions: np.ndarray, duration: float =
 
     def frame_gen():
         grid = seed.copy()
-        for i in tqdm(range(target), desc="Generating animation"):
+        for i in tqdm(range(target), desc=f"Generating {filename}"):
             r, c = stick_positions[i]
             grid[r, c] = 1
             yield grid.copy()
@@ -121,26 +121,6 @@ def animate_dla(seed: np.ndarray, stick_positions: np.ndarray, duration: float =
     plt.close()
 
 
-def run_heatmap(grid_size: int, seed_size: int, target: int, n_runs: int,
-                p_s: float = 1.0, title: str = "", filename: str = None) -> None:
-    """Run the DLA simulation n_runs times and plot a heatmap of particle frequency."""
-    heatmap = np.zeros((grid_size, grid_size), dtype=np.float64)
-    for _ in tqdm(range(n_runs), desc=f"Running DLA simulations (p_s={p_s})"):
-        result, _, _ = monte_carlo_dla(make_seed(grid_size, seed_size), target=target, p_s=p_s)
-        heatmap += (result > 0).astype(np.float64)
-    heatmap /= n_runs
-
-    plt.figure()
-    plt.imshow(heatmap, cmap='gray_r', vmin=0, vmax=1)
-    plt.colorbar().remove()
-    plt.title(title or f"Monte Carlo DLA Heatmap (p_s={p_s}, n={n_runs})")
-    plt.axis('off')
-    if filename:
-        plt.savefig(filename, bbox_inches='tight')
-    else:
-        plt.show()
-
-
 def make_seed(grid_size: int, seed_size: int) -> np.ndarray:
     grid = np.zeros((grid_size, grid_size), dtype=np.int64)
     mid = grid_size // 2
@@ -151,50 +131,60 @@ def make_seed(grid_size: int, seed_size: int) -> np.ndarray:
     return grid
 
 grid_size = 100
+p_s_values = [1.0, 0.5, 0.2, 0.01]
+dla_simulations = []
+heatmaps = []
 
-seed = make_seed(grid_size, 3)
-sim, stick_positions, steps = monte_carlo_dla(seed, target=500)
-print(f"Monte Carlo DLA with p_s=1.0 took {steps} steps to reach 500 particles.")
-plt.imshow(sim, cmap='gray_r')
-plt.title("Monte Carlo DLA Cluster $p_s=1.0$")
-plt.axis('off')
-plt.colorbar().remove()
-plt.savefig("set_2/outputs/mc_dla_1_0.png", bbox_inches='tight')
-animate_dla(seed, stick_positions, title="Monte Carlo DLA Animation, $p_s=1.0$", filename="set_2/outputs/mc_dla_1_0.gif")
+# Generate DLA simulations and animations
+fig_dla, axes_dla = plt.subplots(2, 2, figsize=(10, 10))
+fig_dla.suptitle("Monte Carlo DLA Simulations", fontsize=16)
+axes_dla = axes_dla.flatten()
 
-seed = make_seed(grid_size, 3)
-sim, stick_positions, steps = monte_carlo_dla(seed, target=500, p_s=0.5)
-print(f"Monte Carlo DLA with p_s=0.5 took {steps} steps to reach 500 particles.")
-plt.imshow(sim, cmap='gray_r')
-plt.title("Monte Carlo DLA Cluster $p_s=0.5$")
-plt.axis('off')
-plt.colorbar().remove()
-plt.savefig("set_2/outputs/mc_dla_0_5.png", bbox_inches='tight')
-animate_dla(seed, stick_positions, title="Monte Carlo DLA Animation, $p_s=0.5$", filename="set_2/outputs/mc_dla_0_5.gif")
+for idx, p_s in enumerate(p_s_values):
+    seed = make_seed(grid_size, 3)
+    sim, stick_positions, steps = monte_carlo_dla(seed, target=500, p_s=p_s)
+    print(f"Monte Carlo DLA with p_s={p_s} took {steps} steps to reach 500 particles.")
+    dla_simulations.append(sim)
 
+    ax = axes_dla[idx]
+    ax.imshow(sim, cmap='gray_r')
+    ax.set_title(f"$p_s={p_s}$")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    for spine in ax.spines.values():
+        spine.set_edgecolor('black')
+        spine.set_linewidth(1)
 
-seed = make_seed(grid_size, 3)
-sim, stick_positions, steps = monte_carlo_dla(seed, target=500, p_s=0.2)
-print(f"Monte Carlo DLA with p_s=0.2 took {steps} steps to reach 500 particles.")
-plt.imshow(sim, cmap='gray_r')
-plt.title("Monte Carlo DLA Cluster $p_s=0.2$")
-plt.axis('off')
-plt.colorbar().remove()
-plt.savefig("set_2/outputs/mc_dla_0_2.png", bbox_inches='tight')
-animate_dla(seed, stick_positions, title="Monte Carlo DLA Animation, $p_s=0.2$", filename="set_2/outputs/mc_dla_0_2.gif")
+    animate_dla(seed, stick_positions, title=f"Monte Carlo DLA Animation, $p_s={p_s}$",
+                filename=f"set_2/outputs/mc_dla_{str(p_s).replace('.', '_')}.gif")
 
-seed = make_seed(grid_size, 3)
-sim, stick_positions, steps = monte_carlo_dla(seed, target=500, p_s=0.01)
-print(f"Monte Carlo DLA with p_s=0.01 took {steps} steps to reach 500 particles.")
-plt.imshow(sim, cmap='gray_r')
-plt.title("Monte Carlo DLA Cluster $p_s=0.01$")
-plt.axis('off')
-plt.colorbar().remove()
-plt.savefig("set_2/outputs/mc_dla_0_01.png", bbox_inches='tight')
-animate_dla(seed, stick_positions, title="Monte Carlo DLA Animation, $p_s=0.01$", filename="set_2/outputs/mc_dla_0_01.gif")
+fig_dla.tight_layout()
+fig_dla.savefig("set_2/outputs/mc_dla.pdf", bbox_inches='tight')
+plt.close(fig_dla)
 
-run_heatmap(grid_size, seed_size=3, target=500, n_runs=20, p_s=1.0, title="Monte Carlo DLA Heatmap, $p_s=1.0$", filename="set_2/outputs/mc_heatmap_1_0.png")
-run_heatmap(grid_size, seed_size=3, target=500, n_runs=20, p_s=0.5, title="Monte Carlo DLA Heatmap, $p_s=0.5$", filename="set_2/outputs/mc_heatmap_0_5.png")
-run_heatmap(grid_size, seed_size=3, target=500, n_runs=20, p_s=0.2, title="Monte Carlo DLA Heatmap, $p_s=0.2$", filename="set_2/outputs/mc_heatmap_0_2.png")
-run_heatmap(grid_size, seed_size=3, target=500, n_runs=20, p_s=0.01, title="Monte Carlo DLA Heatmap, $p_s=0.01$", filename="set_2/outputs/mc_heatmap_0_01.png")
+# Generate heatmaps
+fig_hm, axes_hm = plt.subplots(2, 2, figsize=(10, 10))
+axes_hm = axes_hm.flatten()
+fig_hm.suptitle("Monte Carlo DLA Heatmaps (n=20)", fontsize=16)
+
+for idx, p_s in enumerate(p_s_values):
+    heatmap = np.zeros((grid_size, grid_size), dtype=np.float64)
+    for _ in tqdm(range(20), desc=f"Running DLA simulations (p_s={p_s})"):
+        result, _, _ = monte_carlo_dla(make_seed(grid_size, 3), target=500, p_s=p_s)
+        heatmap += (result > 0).astype(np.float64)
+    heatmap /= 20
+    heatmaps.append(heatmap)
+
+    ax = axes_hm[idx]
+    ax.imshow(heatmap, cmap='gray_r', vmin=0, vmax=1)
+    ax.set_title(f"$p_s={p_s}$")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    for spine in ax.spines.values():
+        spine.set_edgecolor('black')
+        spine.set_linewidth(1)
+
+fig_hm.tight_layout()
+fig_hm.savefig("set_2/outputs/mc_heatmap.pdf", bbox_inches='tight')
+plt.close(fig_hm)
 
