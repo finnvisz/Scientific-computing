@@ -4,14 +4,14 @@ import matplotlib.pyplot as plt
 from scipy.sparse.linalg import spsolve
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-from models.DLA import (
+from set_2.models.DLA import (
     DLA,
     solve_laplace,
     find_growth_candidates,
     add_candidates
 )
 
-from models.Gray_Scott import (
+from set_2.models.Gray_Scott import (
     grid_initialization,
     A_matrix,
     b_vector
