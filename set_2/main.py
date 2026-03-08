@@ -43,7 +43,7 @@ def main():
         ax.set_title(f"η={eta}", fontsize=25)
         ax.axis("off")
         plt.tight_layout()
-        plt.savefig(f'set_2/DLA_eta_comparison_omega={omega}.png')
+        plt.savefig(f'{out}/DLA_eta_comparison_omega={omega}.png')
 
     # Find optimal omega
     omegas = np.arange(1.0, 2.0, 0.05)
@@ -79,7 +79,7 @@ def main():
     plt.ylabel("Mean Iterations per Step")
     plt.title("SOR Convergence Speed vs. Omega")
     plt.grid(True, which="both", ls="-", alpha=0.5)
-    plt.savefig('set_2/result_stats_omega.png')
+    plt.savefig(f'{out}/result_stats_omega.png')
 
     ##########################
     ## 2.3 Gray-Scott model ##
@@ -148,8 +148,7 @@ def main():
         axes2[1, 0].set_ylabel('V-Chemical Concentration Profile\nAt Different Time Steps')
         plt.suptitle(f'Gray-Scott: f={f}, k={k} ({label})')
         plt.tight_layout()
-        plt.savefig(f'set_2/gray_scott_concentration_profiles_{label}.png')
-        plt.show()
+        plt.savefig(f'{out}/gray_scott_concentration_profiles_{label}.png')
 
 
 if __name__ == "__main__":
