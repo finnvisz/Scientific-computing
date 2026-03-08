@@ -36,12 +36,12 @@ def main():
 
     # Plot the growth for different values of eta
     size = 100
-    etas = [0, 0.2, 0.5, 1, 1.5, 2, 3, 5, 7, 10]
+    etas = [0, 0.5, 1, 1.5, 2, 3, 5, 7, 10]
     iterations = 1000
     omega = 1.7
 
-    rows, cols = 2, 5
-    fig, axes = plt.subplots(rows, cols, figsize=(20, 10))
+    rows, cols = 3,3
+    fig, axes = plt.subplots(rows, cols, figsize=(10, 10))
     axes_flat = axes.flatten()
 
     for i, eta in enumerate(etas):
