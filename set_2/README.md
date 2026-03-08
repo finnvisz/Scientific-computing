@@ -4,8 +4,7 @@ Code for **Diffusion-Limited Aggregation (DLA)** and the **Gray-Scott reaction-d
 
 ## Requirements
 
-- Python 3
-- NumPy, SciPy, Matplotlib
+To install Dependencies: pip install -r requirements.tx
 
 ## How to run
 
