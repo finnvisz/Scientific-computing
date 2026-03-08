@@ -102,8 +102,8 @@ def main():
 
     alpha_u = D_u * dt / dx**2
     alpha_v = D_v * dt / dx**2
-    A_u = A_matrix(N=N, alpha=alpha_u)
-    A_v = A_matrix(N=N, alpha=alpha_v)
+    A_u = A_matrix(grid_size=N, sigma=alpha_u)
+    A_v = A_matrix(grid_size=N, sigma=alpha_v)
 
     for f, k, label in param_sets:
         print(f"Gray-Scott: f={f}, k={k} ({label})")

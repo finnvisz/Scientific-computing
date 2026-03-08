@@ -3,7 +3,6 @@
 import numpy as np
 from scipy.sparse import lil_matrix
 
-
 def grid_initialization(N, y_tolerance, x_tolerance, u_initial, v_initial):
     """
     Initializes values in the computational domain, with the U concentration everywhere, with the exception of 
