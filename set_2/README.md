@@ -32,13 +32,13 @@ Code for **Diffusion-Limited Aggregation (DLA)** and the **Gray-Scott reaction-d
 
 ## Where figures are saved
 
-Figures are written into the **set_2** folder. When you run from the repo root, they appear in `Scientific-computing/set_2/`, for example:
+Figures are written into the **set_2/outputs** folder. When you run from the repo root, they appear in `Scientific-computing/set_2/outputs`, for example:
 
-- `set_2/DLA_eta_comparison_omega=1.7.png`
-- `set_2/result_stats_omega.png`
-- `set_2/gray_scott_concentration_profiles_Default Parameters.png`
-- `set_2/gray_scott_concentration_profiles_Random Parameters.png`
-- `set_2/gray_scott_concentration_profiles_Coral Growth Parameters.png`
+- `set_2/outputs/DLA_eta_comparison_omega=1.7.png`
+- `set_2/outputs/result_stats_omega.png`
+- `set_2/outputs/gray_scott_concentration_profiles_Default Parameters.png`
+- `set_2/outputs/gray_scott_concentration_profiles_Random Parameters.png`
+- `set_2/outputs/gray_scott_concentration_profiles_Coral Growth Parameters.png`
 
 ## Layout
 
@@ -47,8 +47,9 @@ set_2/
 ├── README.md
 ├── main.py
 ├── __init__.py
-└── models/
-    ├── DLA.py
-    ├── Gray_Scott.py
-    └── monte_carlo.py
+├── models/
+│   ├── DLA.py             
+│   ├── Gray_Scott.py       
+│   └── monte_carlo.py      
+└── outputs
 ```
