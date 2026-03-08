@@ -18,31 +18,37 @@ from models.Gray_Scott import (
 
 def main():
     """Run all assignment questions."""
+    out = "set_2/outputs"
 
     ######################
     ###### 2.1 DLA #######
     ######################
 
     # Plot the growth for different values of eta
-    size=100
-    etas = [0.2, 0.5, 1, 1.5, 2]
-    iterations=1000
+    size = 100
+    etas = [0, 0.2, 0.5, 1, 1.5, 2, 3, 5, 7, 10]
+    iterations = 1000
     omega = 1.7
 
-    fig, axes = plt.subplots(1, len(etas), figsize=(5*len(etas), 5))
+    rows, cols = 2, 5
+    fig, axes = plt.subplots(rows, cols, figsize=(20, 10))
+    axes_flat = axes.flatten()
 
-    for ax, eta in zip(axes, etas):
-        result = DLA(size=100, iterations=iterations, eta=eta, omega=omega)
+    for i, eta in enumerate(etas):
+        ax = axes_flat[i]
+        result = DLA(size=size, iterations=iterations, eta=eta, omega=omega)
         
         ax.imshow(result, cmap='Blues')
         ax.set_title(f"η={eta}", fontsize=25)
         ax.axis("off")
-        plt.tight_layout()
-        plt.savefig(f"DLA_eta_comparison_omega={omega}.png")
+
+    # Clean up layout and save
+    plt.tight_layout()
+    plt.savefig(f"{out}/DLA_eta_comparison_omega={omega}.png")
 
     # Find optimal omega
     omegas = np.arange(1.0, 2.0, 0.05)
-    num_trials = 1  # How many full DLA growths to run per omega
+    num_trials = 1  # How many full DLA growths to run per omega (for now set to 1 to decrease runtime)
     results_stats = {}
 
     for w in omegas:
@@ -74,7 +80,7 @@ def main():
     plt.ylabel("Mean Iterations per Step")
     plt.title("SOR Convergence Speed vs. Omega")
     plt.grid(True, which="both", ls="-", alpha=0.5)
-    plt.savefig("result_stats_omega.png")
+    plt.savefig(f"{out}/result_stats_omega.png")
 
     ##########################
     ## 2.3 Gray-Scott model ##
@@ -128,7 +134,7 @@ def main():
             
             plt.pause(0.01)
     
-    plt.show()
+    plt.savefig(f"{out}/U_and_V.png")
 
 
 
