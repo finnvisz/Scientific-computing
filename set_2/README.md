@@ -4,8 +4,7 @@ Code for **Diffusion-Limited Aggregation (DLA)** and the **Gray-Scott reaction-d
 
 ## Requirements
 
-- Python 3
-- NumPy, SciPy, Matplotlib
+To install Dependencies: pip install -r requirements.tx
 
 ## How to run
 
@@ -17,28 +16,32 @@ Code for **Diffusion-Limited Aggregation (DLA)** and the **Gray-Scott reaction-d
 
    You must be in `Scientific-computing`, not inside `set_2`.
 
-2. **Run the main script as a module:**
+2. **Run the main script:**
 
    ```bash
-   python3 -m set_2.main
+   python3 set_2/main.py
    ```
 
-   If you see `ModuleNotFoundError: No module named 'set_2'`, you are not in the repo root—move up one level so that `set_2` is a subfolder of your current directory, then run the command again.
+   This command *must* be run from the project root directory, not the set_2 subfolder
 
 ## What it does
 
 - **2.1 DLA:** Builds DLA clusters for several values of η and compares SOR convergence for different ω.
+- **2.2 Monte Carlo:** Builds DLA clusters for several values of $p_s$ and saves the resulting figures, heatmaps, and animations.
 - **2.3 Gray-Scott:** Runs the Gray-Scott model for different (f, k) and plots U and V concentration profiles at chosen time steps.
 
 ## Where figures are saved
 
-Figures are written into the **set_2** folder. When you run from the repo root, they appear in `Scientific-computing/set_2/`, for example:
+Figures are written into the **set_2/outputs** folder. When you run from the repo root, they appear in `Scientific-computing/set_2/outputs`, for example:
 
-- `set_2/DLA_eta_comparison_omega=1.7.png`
-- `set_2/result_stats_omega.png`
-- `set_2/gray_scott_concentration_profiles_Default Parameters.png`
-- `set_2/gray_scott_concentration_profiles_Random Parameters.png`
-- `set_2/gray_scott_concentration_profiles_Coral Growth Parameters.png`
+- `set_2/outputs/DLA_eta_comparison_omega=1.7.png`
+- `set_2/outputs/result_stats_omega.png`
+- `set_2/outputs/gray_scott_concentration_profiles_Default Parameters.png`
+- `set_2/outputs/gray_scott_concentration_profiles_Random Parameters.png`
+- `set_2/outputs/gray_scott_concentration_profiles_Coral Growth Parameters.png`
+- `set_2/outputs/mc_dla.pdf`
+- `set_2/outputs/mc_heatmap.pdf`
+- `set_2/outputs/mc_dla_*.gif`
 
 ## Layout
 
@@ -47,8 +50,9 @@ set_2/
 ├── README.md
 ├── main.py
 ├── __init__.py
-└── models/
-    ├── DLA.py
-    ├── Gray_Scott.py
-    └── monte_carlo.py
+├── models/
+│   ├── DLA.py             
+│   ├── Gray_Scott.py       
+│   └── monte_carlo.py      
+└── outputs
 ```

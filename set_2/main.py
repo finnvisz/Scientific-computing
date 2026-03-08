@@ -3,15 +3,24 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.sparse.linalg import spsolve
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+import matplotlib.animation as animation
+from numba import njit
+from tqdm import tqdm
 
-from set_2.models.DLA import (
+from models.DLA import (
     DLA,
     solve_laplace,
     find_growth_candidates,
     add_candidates
 )
 
-from set_2.models.Gray_Scott import (
+from models.monte_carlo import (
+    make_seed,
+    monte_carlo_dla,
+    animate_dla
+)
+
+from models.Gray_Scott import (
     grid_initialization,
     A_matrix,
     b_vector
@@ -27,12 +36,12 @@ def main():
 
     # Plot the growth for different values of eta
     size = 100
-    etas = [0, 0.2, 0.5, 1, 1.5, 2, 3, 5, 7, 10]
+    etas = [0, 0.5, 1, 1.5, 2, 3, 5, 7, 10]
     iterations = 1000
     omega = 1.7
 
-    rows, cols = 2, 5
-    fig, axes = plt.subplots(rows, cols, figsize=(20, 10))
+    rows, cols = 3,3
+    fig, axes = plt.subplots(rows, cols, figsize=(10, 10))
     axes_flat = axes.flatten()
 
     for i, eta in enumerate(etas):
@@ -43,7 +52,7 @@ def main():
         ax.set_title(f"η={eta}", fontsize=25)
         ax.axis("off")
         plt.tight_layout()
-        plt.savefig(f'set_2/DLA_eta_comparison_omega={omega}.png')
+        plt.savefig(f'{out}/DLA_eta_comparison_omega={omega}.png')
 
     # Find optimal omega
     omegas = np.arange(1.0, 2.0, 0.05)
@@ -79,7 +88,74 @@ def main():
     plt.ylabel("Mean Iterations per Step")
     plt.title("SOR Convergence Speed vs. Omega")
     plt.grid(True, which="both", ls="-", alpha=0.5)
-    plt.savefig('set_2/result_stats_omega.png')
+    plt.savefig(f'{out}/result_stats_omega.png')
+
+    ###########################
+    ## 2.2 Monte Carlo model ##
+    ###########################
+
+    grid_size = 100
+    p_s_values = [1.0, 0.5, 0.2, 0.01]
+    dla_simulations = []
+    heatmaps = []
+
+    # Generate DLA simulations and animations
+    fig_dla, axes_dla = plt.subplots(2, 2, figsize=(10, 10))
+    fig_dla.suptitle("Monte Carlo DLA Simulations", fontsize=16)
+    axes_dla = axes_dla.flatten()
+
+    for idx, p_s in enumerate(p_s_values):
+        seed = make_seed(grid_size, 3)
+        sim, stick_positions, steps = monte_carlo_dla(seed, target=500, p_s=p_s)
+        print(f"Monte Carlo DLA with p_s={p_s} took {steps} steps to reach 500 particles.")
+        dla_simulations.append(sim)
+
+        ax = axes_dla[idx]
+        ax.imshow(sim, cmap='gray_r')
+        ax.set_title(f"$p_s={p_s}$")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        for spine in ax.spines.values():
+            spine.set_edgecolor('black')
+            spine.set_linewidth(1)
+
+        animate_dla(seed, stick_positions, title=f"Monte Carlo DLA Animation, $p_s={p_s}$",
+                    filename=f"{out}/mc_dla_{str(p_s).replace('.', '_')}.gif")
+
+    fig_dla.tight_layout()
+    fig_dla.savefig(f"{out}/mc_dla.pdf", bbox_inches='tight')
+    plt.close(fig_dla)
+
+    # Generate heatmaps
+    fig_hm, axes_hm = plt.subplots(2, 2, figsize=(10, 10))
+    axes_hm = axes_hm.flatten()
+    fig_hm.suptitle("Monte Carlo DLA Heatmaps (n=20)", fontsize=16)
+
+    for idx, p_s in enumerate(p_s_values):
+        heatmap = np.zeros((grid_size, grid_size), dtype=np.float64)
+        avg_steps = 0
+        for _ in tqdm(range(20), desc=f"Running DLA simulations (p_s={p_s})"):
+            result, _, steps = monte_carlo_dla(make_seed(grid_size, 3), target=500, p_s=p_s)
+            avg_steps += steps
+            heatmap += (result > 0).astype(np.float64)
+        heatmap /= 20
+        avg_steps /= 20
+        print(f"\nAverage steps for p_s={p_s}: {avg_steps}")
+        heatmaps.append(heatmap)
+
+        ax = axes_hm[idx]
+        ax.imshow(heatmap, cmap='gray_r', vmin=0, vmax=1)
+        ax.set_title(f"$p_s={p_s}$")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        for spine in ax.spines.values():
+            spine.set_edgecolor('black')
+            spine.set_linewidth(1)
+
+    fig_hm.tight_layout()
+    fig_hm.savefig(f"{out}/mc_heatmap.pdf", bbox_inches='tight')
+    plt.close(fig_hm)
+
 
     ##########################
     ## 2.3 Gray-Scott model ##
@@ -93,7 +169,7 @@ def main():
     max_steps = 5000
     plot_steps = [500, 1000, 2500, 5000]
 
-    # (f, k, label) for each run; label used in saved filename
+    # (f, k, label) for each run
     param_sets = [
         (0.037, 0.060, "Default Parameters"),
         (0.0393, 0.059, "Random Parameters"),
@@ -126,7 +202,7 @@ def main():
                 snapshots_v.append(v_grid.copy())
 
         n_snap = len(snapshots_u)
-        # U concentration: separate figure, 2x2 grid
+        # U concentration:
         fig_u, axes_u = plt.subplots(2, 2, figsize=(8, 8))
         axes_u_flat = axes_u.flatten()
         for j in range(n_snap):
@@ -142,7 +218,7 @@ def main():
         plt.savefig(f'set_2/gray_scott_U_{label}.png')
         plt.show()
 
-        # V concentration: separate figure, 2x2 grid
+        # V concentration:
         fig_v, axes_v = plt.subplots(2, 2, figsize=(8, 8))
         axes_v_flat = axes_v.flatten()
         for j in range(n_snap):
