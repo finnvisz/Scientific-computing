@@ -171,7 +171,7 @@ def main():
 
     # (f, k, label) for each run
     param_sets = [
-        (0.037, 0.060, "Default Parameters"),
+        (0.035, 0.060, "Default Parameters"),
         (0.0393, 0.059, "Random Parameters"),
         (0.0545, 0.062, "Coral Growth Parameters"),
     ]
@@ -215,7 +215,7 @@ def main():
             fig_u.colorbar(im, cax=cax, label='U')
         fig_u.suptitle(f'U concentration — Gray-Scott: f={f}, k={k} ({label})')
         plt.tight_layout()
-        plt.savefig(f'set_2/gray_scott_U_{label}.png')
+        plt.savefig(f'set_2/outputs/gray_scott_U_{label}.png')
         plt.show()
 
         # V concentration:
@@ -231,7 +231,7 @@ def main():
             fig_v.colorbar(im, cax=cax, label='V')
         fig_v.suptitle(f'V concentration — Gray-Scott: f={f}, k={k} ({label})')
         plt.tight_layout()
-        plt.savefig(f'set_2/gray_scott_V_{label}.png')
+        plt.savefig(f'set_2/outputs/gray_scott_V_{label}.png')
         plt.show()
 
 
