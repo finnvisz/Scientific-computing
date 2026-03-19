@@ -101,7 +101,7 @@ def main():
 
     # Generate DLA simulations and animations
     fig_dla, axes_dla = plt.subplots(2, 2, figsize=(10, 10))
-    fig_dla.suptitle("Monte Carlo DLA Simulations", fontsize=16)
+    fig_dla.suptitle("Monte Carlo DLA Simulations", fontsize=20)
     axes_dla = axes_dla.flatten()
 
     for idx, p_s in enumerate(p_s_values):
@@ -112,7 +112,7 @@ def main():
 
         ax = axes_dla[idx]
         ax.imshow(sim, cmap='gray_r')
-        ax.set_title(f"$p_s={p_s}$")
+        ax.set_title(f"$p_s={p_s}$", fontsize=16)
         ax.set_xticks([])
         ax.set_yticks([])
         for spine in ax.spines.values():
@@ -129,7 +129,7 @@ def main():
     # Generate heatmaps
     fig_hm, axes_hm = plt.subplots(2, 2, figsize=(10, 10))
     axes_hm = axes_hm.flatten()
-    fig_hm.suptitle("Monte Carlo DLA Heatmaps (n=20)", fontsize=16)
+    fig_hm.suptitle("Monte Carlo DLA Heatmaps (n=20)", fontsize=20)
 
     for idx, p_s in enumerate(p_s_values):
         heatmap = np.zeros((grid_size, grid_size), dtype=np.float64)
@@ -145,7 +145,7 @@ def main():
 
         ax = axes_hm[idx]
         ax.imshow(heatmap, cmap='gray_r', vmin=0, vmax=1)
-        ax.set_title(f"$p_s={p_s}$")
+        ax.set_title(f"$p_s={p_s}$", fontsize=16)
         ax.set_xticks([])
         ax.set_yticks([])
         for spine in ax.spines.values():
