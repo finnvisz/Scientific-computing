@@ -36,12 +36,12 @@ def main():
 
     # Plot the growth for different values of eta
     size = 100
-    etas = [0, 0.2, 0.5, 1, 1.5, 2, 3, 5, 7, 10]
+    etas = [0, 0.5, 1, 1.5, 2, 3, 5, 7, 10]
     iterations = 1000
     omega = 1.7
 
-    rows, cols = 2, 5
-    fig, axes = plt.subplots(rows, cols, figsize=(20, 10))
+    rows, cols = 3,3
+    fig, axes = plt.subplots(rows, cols, figsize=(10, 10))
     axes_flat = axes.flatten()
 
     for i, eta in enumerate(etas):
@@ -162,16 +162,16 @@ def main():
     ##########################
 
     dx = 1.0
-    dt = 1.0
+    dt = 1.5
     D_u = 0.16
     D_v = 0.08
-    N = 128
+    N = 64
     max_steps = 5000
     plot_steps = [500, 1000, 2500, 5000]
 
-    # (f, k, label) for each run; label used in saved filename
+    # (f, k, label) for each run
     param_sets = [
-        (0.037, 0.060, "Default Parameters"),
+        (0.035, 0.060, "Default Parameters"),
         (0.0393, 0.059, "Random Parameters"),
         (0.0545, 0.062, "Coral Growth Parameters"),
     ]
@@ -202,29 +202,37 @@ def main():
                 snapshots_v.append(v_grid.copy())
 
         n_snap = len(snapshots_u)
-        fig2, axes2 = plt.subplots(2, n_snap, figsize=(4 * n_snap, 8))
+        # U concentration:
+        fig_u, axes_u = plt.subplots(2, 2, figsize=(8, 8))
+        axes_u_flat = axes_u.flatten()
         for j in range(n_snap):
-            im0 = axes2[0, j].imshow(snapshots_u[j], cmap='viridis', vmin=0, vmax=1, aspect='equal')
-            axes2[0, j].set_title(f't = {plot_steps[j]}')
-            axes2[0, j].set_xlabel('x')
-            axes2[0, j].set_ylabel('y')
-            div0 = make_axes_locatable(axes2[0, j])
-            cax0 = div0.append_axes("right", size="5%", pad=0.05)
-            fig2.colorbar(im0, cax=cax0, label='U')
-
-            im1 = axes2[1, j].imshow(snapshots_v[j], cmap='viridis', vmin=0, vmax=1, aspect='equal')
-            axes2[1, j].set_title(f't = {plot_steps[j]}')
-            axes2[1, j].set_xlabel('x')
-            axes2[1, j].set_ylabel('y')
-            div1 = make_axes_locatable(axes2[1, j])
-            cax1 = div1.append_axes("right", size="5%", pad=0.05)
-            fig2.colorbar(im1, cax=cax1, label='V')
-
-        axes2[0, 0].set_ylabel('U-Chemical Concentration Profile\nAt Different Time Steps')
-        axes2[1, 0].set_ylabel('V-Chemical Concentration Profile\nAt Different Time Steps')
-        plt.suptitle(f'Gray-Scott: f={f}, k={k} ({label})')
+            im = axes_u_flat[j].imshow(snapshots_u[j], cmap='viridis', vmin=0, vmax=1, aspect='equal')
+            axes_u_flat[j].set_title(f't = {plot_steps[j]}')
+            axes_u_flat[j].set_xlabel('x')
+            axes_u_flat[j].set_ylabel('y')
+            div = make_axes_locatable(axes_u_flat[j])
+            cax = div.append_axes("right", size="5%", pad=0.05)
+            fig_u.colorbar(im, cax=cax, label='U')
+        fig_u.suptitle(f'U concentration — Gray-Scott: f={f}, k={k} ({label})')
         plt.tight_layout()
-        plt.savefig(f'{out}/gray_scott_concentration_profiles_{label}.png')
+        plt.savefig(f'set_2/outputs/gray_scott_U_{label}.png')
+        plt.show()
+
+        # V concentration:
+        fig_v, axes_v = plt.subplots(2, 2, figsize=(8, 8))
+        axes_v_flat = axes_v.flatten()
+        for j in range(n_snap):
+            im = axes_v_flat[j].imshow(snapshots_v[j], cmap='viridis', vmin=0, vmax=1, aspect='equal')
+            axes_v_flat[j].set_title(f't = {plot_steps[j]}')
+            axes_v_flat[j].set_xlabel('x')
+            axes_v_flat[j].set_ylabel('y')
+            div = make_axes_locatable(axes_v_flat[j])
+            cax = div.append_axes("right", size="5%", pad=0.05)
+            fig_v.colorbar(im, cax=cax, label='V')
+        fig_v.suptitle(f'V concentration — Gray-Scott: f={f}, k={k} ({label})')
+        plt.tight_layout()
+        plt.savefig(f'set_2/outputs/gray_scott_V_{label}.png')
+        plt.show()
 
 
 if __name__ == "__main__":
