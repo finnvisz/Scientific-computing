@@ -15,6 +15,13 @@ import matplotlib.pyplot as plt
 from numba import njit, prange
 from tqdm import tqdm
 
+# Given physical parameters:
+L_phys = 2.2        # domain length [m]
+H_phys = 0.41       # domain height [m] (0.15 + 0.1 + 0.16)
+D_phys = 0.1        # cylinder diameter [m]
+cx_phys = 0.15      # cylinder center x [m] (from left wall)
+cy_phys = 0.20      # cylinder center y [m] (0.15m from bottom + 0.05m radius)
+
 # 9 discrete velocities for 2D lattice Boltzmann.
 # Index ordering: 0=rest, 1=E, 2=N, 3=W, 4=S, 5=NE, 6=NW, 7=SW, 8=SE
 #
@@ -58,13 +65,6 @@ w9  = w.reshape(9, 1, 1)
 class Grid:
     """Stores all lattice parameters, grid coordinates, and obstacle mask."""
 
-    # Physical parameters (SI units, from the geometry setup)
-    L_phys = 2.2        # domain length [m]
-    H_phys = 0.41       # domain height [m] (0.15 + 0.1 + 0.16)
-    D_phys = 0.1        # cylinder diameter [m]
-    cx_phys = 0.15      # cylinder center x [m] (from left wall)
-    cy_phys = 0.20      # cylinder center y [m] (0.15m from bottom + 0.05m radius)
-
     def __init__(self, Re, N, u_lb=0.08):
         """
         Parameters:
@@ -82,6 +82,8 @@ class Grid:
         # Grid dimensions
         self.Nx = int(self.L_phys / self.dx)
         self.Ny = int(self.H_phys / self.dx)
+        if self.Ny == (self.H_phys / self.dx) -1:
+            self.Ny += 1  # handle floating point rounding that can cause off-by-one in Ny
 
         # Cylinder center and radius in lattice units
         self.cx_lat = self.cx_phys / self.dx
@@ -441,15 +443,16 @@ def run(grid, num_steps, plot_every=100, plot=True, warmup_steps=0, plot_warmup=
             apply_wall_bc(f, f_postcol)
             apply_cylinder_bc(f, f_postcol, bl_i, bl_j, bl_k, bl_q)
             zero_solid(f, grid.solid_i, grid.solid_j)
+            if plot and (plot_warmup or step >= warmup_steps) and (step - (warmup_steps if not plot_warmup else 0)) % plot_every == 0:
+                compute_macroscopic(f, rho, ux, uy)
+                fig, axes = plot_flow(ux, uy, grid.solid, step - warmup_steps, fig, axes)
         except FloatingPointError:
             print(f"Numerical instability at step {step}, stopping simulation.")
             break
 
-        if plot and (plot_warmup or step >= warmup_steps) and (step - (warmup_steps if not plot_warmup else 0)) % plot_every == 0:
-            compute_macroscopic(f, rho, ux, uy)
-            fig, axes = plot_flow(ux, uy, grid.solid, step - warmup_steps, fig, axes)
 
     if plot:
+        plot_flow(ux, uy, grid.solid, step - warmup_steps, fig, axes)
         plt.ioff()
         plt.show()
 
@@ -528,8 +531,8 @@ def plot_flow(ux, uy, solid_mask, step, fig=None, axes=None):
 
 if __name__ == "__main__":
     np.seterr(all='raise')  # raise exceptions on numerical issues (e.g. NaN, inf)
-    Re = 200
-    N = 50
+    Re = 500
+    N = 100
     u_lb = 0.1
     grid = Grid(Re, N, u_lb)
-    run(grid, num_steps=10000, warmup_steps=grid.Nx, plot_every=10, plot=True, plot_warmup=True)
+    run(grid, num_steps=20000, warmup_steps=grid.Nx, plot_every=10, plot=True, plot_warmup=True)
