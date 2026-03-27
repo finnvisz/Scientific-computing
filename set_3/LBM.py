@@ -12,6 +12,7 @@ Cylinder: Interpolated bounce-back (Bouzidi et al.)
 
 import numpy as np
 import matplotlib.pyplot as plt
+from numba import njit, prange
 from tqdm import tqdm
 
 # 9 discrete velocities for 2D lattice Boltzmann.
@@ -50,8 +51,9 @@ opp = np.array([0, 3, 4, 1, 2, 7, 8, 5, 6])
 cs2 = 1.0 / 3.0
 
 # Reshaped for broadcasting with (Nx, Ny) fields
-c9 = c.reshape(9, 2, 1, 1)   # index as c9[:, 0] -> shape (9, 1, 1)
-w9 = w.reshape(9, 1, 1)
+c9x = c[:, 0].reshape(9, 1, 1)   # shape (9, 1, 1)
+c9y = c[:, 1].reshape(9, 1, 1)   # shape (9, 1, 1)
+w9  = w.reshape(9, 1, 1)
 
 class Grid:
     """Stores all lattice parameters, grid coordinates, and obstacle mask."""
@@ -102,7 +104,7 @@ class Grid:
 
         print(f"Grid: {self.Nx} x {self.Ny}, tau = {self.tau:.4f}, "
               f"nu_lb = {self.nu_lb:.6f}, Ma = {u_lb / (1/3)**0.5:.3f}, "
-              f"boundary links = {len(self.boundary_links)}")
+              f"boundary links = {self.boundary_links[0].shape[0]}")
 
     def _compute_boundary_links(self):
         """
@@ -161,8 +163,13 @@ class Grid:
 
                         links.append((i, j, k, q))
 
-        return links
+        bl_i = np.array([l[0] for l in links], dtype=np.int64)
+        bl_j = np.array([l[1] for l in links], dtype=np.int64)
+        bl_k = np.array([l[2] for l in links], dtype=np.int64)
+        bl_q = np.array([l[3] for l in links], dtype=np.float64)
+        return bl_i, bl_j, bl_k, bl_q
 
+@njit
 def equilibrium(rho, ux, uy):
     """
     Compute the equilibrium distribution f_eq for all 9 directions.
@@ -175,11 +182,12 @@ def equilibrium(rho, ux, uy):
     Returns:
         feq: equilibrium distributions, shape (9, Nx, Ny)
     """
-    cu = c9[:, 0] * ux + c9[:, 1] * uy   # (9, Nx, Ny)
+    cu = c9x * ux + c9y * uy              # (9, Nx, Ny)
     usq = ux**2 + uy**2                   # (Nx, Ny)
     feq = w9 * rho * (1 + cu/cs2 + cu**2/(2*cs2**2) - usq/(2*cs2))
     return feq
 
+@njit
 def compute_macroscopic(f):
     """
     Compute macroscopic density and velocity from distribution functions.
@@ -194,10 +202,11 @@ def compute_macroscopic(f):
     """
     rho = np.sum(f, axis=0)                        # (Nx, Ny)
     rho_safe = np.where(rho > 0, rho, 1.0)          # avoid division by zero at solid nodes
-    ux = np.sum(f * c9[:, 0], axis=0) / rho_safe    # (Nx, Ny)
-    uy = np.sum(f * c9[:, 1], axis=0) / rho_safe    # (Nx, Ny)
+    ux = np.sum(f * c9x, axis=0) / rho_safe          # (Nx, Ny)
+    uy = np.sum(f * c9y, axis=0) / rho_safe          # (Nx, Ny)
     return rho, ux, uy
 
+@njit(parallel=True)
 def collide(f, rho, ux, uy, tau):
     """
     BGK collision operator.
@@ -216,6 +225,7 @@ def collide(f, rho, ux, uy, tau):
     f_out = f - (1/tau) * (f - equilibrium(rho, ux, uy))
     return f_out
 
+@njit(parallel=True)
 def stream(f):
     """
     Stream distributions to neighboring nodes.
@@ -223,7 +233,7 @@ def stream(f):
     Each f_i is shifted by its corresponding lattice velocity c_i.
     f_i(x + c_i, t+1) = f_i(x, t)
 
-    Use np.roll for periodic shifting, then fix boundaries separately.
+    Performs a roll with modular indexing, boundary conditions applied later.
 
     Parameters:
         f: post-collision distributions, shape (9, Nx, Ny)
@@ -231,13 +241,20 @@ def stream(f):
     Returns:
         f_streamed: post-streaming distributions, shape (9, Nx, Ny)
     """
-    # Roll each direction individually — np.roll only accepts scalar shifts.
-    # Periodic wrapping at boundaries is corrected in the BC step.
+    # np.roll with axis is unsupported in numba; using modular index arithmetic instead.
+    Nx, Ny = f.shape[1], f.shape[2]
     f_streamed = np.empty_like(f)
-    for i in range(9):
-        f_streamed[i] = np.roll(np.roll(f[i], c[i, 0], axis=0), c[i, 1], axis=1)
+    for k in prange(9):
+        cx = c[k, 0]
+        cy = c[k, 1]
+        for i in range(Nx):
+            ni = (i + cx) % Nx
+            for j in range(Ny):
+                nj = (j + cy) % Ny
+                f_streamed[k, ni, nj] = f[k, i, j]
     return f_streamed
 
+@njit
 def apply_wall_bc(f, f_prev):
     """
     No-slip bounce-back on top (j = Ny-1) and bottom (j = 0) walls.
@@ -260,6 +277,7 @@ def apply_wall_bc(f, f_prev):
     f[8, :, -1] = f_prev[6, :, -1]
 
 
+@njit
 def apply_inlet_bc(f, ux_inlet_profile):
     """
     Zou-He velocity boundary condition at the left wall (i = 0).
@@ -281,6 +299,7 @@ def apply_inlet_bc(f, ux_inlet_profile):
     f[5, 0, :] = f[7, 0, :] + (1/6) * rho * ux + 0.5 * (f[4, 0, :] - f[2, 0, :])
     f[8, 0, :] = f[6, 0, :] + (1/6) * rho * ux - 0.5 * (f[4, 0, :] - f[2, 0, :])
 
+@njit
 def apply_outlet_bc(f):
     """
     Zou-He pressure boundary condition at the right wall (i = Nx-1).
@@ -301,17 +320,21 @@ def apply_outlet_bc(f):
     f[7, -1, :] = f[5, -1, :] - (1/6) * rho_out * ux + 0.5 * (f[2, -1, :] - f[4, -1, :])
     f[6, -1, :] = f[8, -1, :] - (1/6) * rho_out * ux - 0.5 * (f[2, -1, :] - f[4, -1, :])
 
-def apply_cylinder_bc(f, f_prev, boundary_links):
+@njit
+def apply_cylinder_bc(f, f_prev, bl_i, bl_j, bl_k, bl_q):
     """
     Bouzidi interpolated bounce-back for the cylinder.
 
     Parameters:
-        f:              post-streaming distributions, shape (9, Nx, Ny)
-        f_prev:         post-collision distributions from before streaming,
-                        shape (9, Nx, Ny)
-        boundary_links: precomputed list of (i, j, k, q) tuples
+        f, f_prev:        post-streaming and post-collision distributions, shape (9, Nx, Ny)
+        bl_i, bl_j, bl_k: fluid node coordinates and direction index, shape (n,)
+        bl_q:             fractional wall distance, shape (n,)
     """
-    for i, j, k, q in boundary_links:
+    for idx in range(bl_i.shape[0]):
+        i = bl_i[idx]
+        j = bl_j[idx]
+        k = bl_k[idx]
+        q = bl_q[idx]
         k_opp = opp[k]
 
         if q < 0.5:
@@ -367,6 +390,8 @@ def run(grid, num_steps, plot_every=100):
     initial_noise = 1e-6 * (np.random.rand(*f.shape) - 0.5)  # small random noise to trigger vortex shedding
     f += initial_noise  # add small noise to trigger vortex shedding
     f[:, grid.solid] = 0
+    bl_i, bl_j, bl_k, bl_q = grid.boundary_links
+
     fig, axes = None, None
     for step in tqdm(range(num_steps), desc="Simulating LBM"):
         try:
@@ -376,7 +401,7 @@ def run(grid, num_steps, plot_every=100):
             apply_inlet_bc(f, profile)
             apply_outlet_bc(f)
             apply_wall_bc(f, f_post)
-            apply_cylinder_bc(f, f_post, grid.boundary_links)
+            apply_cylinder_bc(f, f_post, bl_i, bl_j, bl_k, bl_q)
         except FloatingPointError:
             print(f"Numerical instability at step {step}, stopping simulation.")
             break
@@ -461,8 +486,8 @@ def plot_flow(ux, uy, solid_mask, step, fig=None, axes=None):
 
 if __name__ == "__main__":
     np.seterr(all='raise')  # raise exceptions on numerical issues (e.g. NaN, inf)
-    Re = 75
-    N = 20
+    Re = 100
+    N = 35
     u_lb = 0.1
     grid = Grid(Re, N, u_lb)
-    run(grid, num_steps=20000, plot_every=10)
+    run(grid, num_steps=10000, plot_every=10)
