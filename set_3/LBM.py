@@ -99,6 +99,11 @@ class Grid:
         X, Y = np.meshgrid(x, y, indexing='ij')
         self.solid = (X - self.cx_lat)**2 + (Y - self.cy_lat)**2 <= self.R_lat**2
 
+        # Precompute solid node indices for fast zeroing
+        si, sj = np.where(self.solid)
+        self.solid_i = si.astype(np.int64)
+        self.solid_j = sj.astype(np.int64)
+
         # Precompute boundary links for the cylinder
         self.boundary_links = self._compute_boundary_links()
 
@@ -188,62 +193,68 @@ def equilibrium(rho, ux, uy):
     return feq
 
 @njit
-def compute_macroscopic(f):
+def compute_macroscopic(f, rho, ux, uy):
     """
     Compute macroscopic density and velocity from distribution functions.
+    Writes results into pre-allocated arrays to avoid allocation overhead.
 
     Parameters:
-        f: distribution functions, shape (9, Nx, Ny)
-
-    Returns:
-        rho: density, shape (Nx, Ny)
-        ux:  x-velocity, shape (Nx, Ny)
-        uy:  y-velocity, shape (Nx, Ny)
+        f:   distribution functions, shape (9, Nx, Ny)
+        rho: output density, shape (Nx, Ny)
+        ux:  output x-velocity, shape (Nx, Ny)
+        uy:  output y-velocity, shape (Nx, Ny)
     """
-    rho = np.sum(f, axis=0)                        # (Nx, Ny)
-    rho_safe = np.where(rho > 0, rho, 1.0)          # avoid division by zero at solid nodes
-    ux = np.sum(f * c9x, axis=0) / rho_safe          # (Nx, Ny)
-    uy = np.sum(f * c9y, axis=0) / rho_safe          # (Nx, Ny)
-    return rho, ux, uy
+    Nx = f.shape[1]
+    Ny = f.shape[2]
+    for i in range(Nx):
+        for j in range(Ny):
+            r = 0.0
+            mx = 0.0
+            my = 0.0
+            for k in range(9):
+                fk = f[k, i, j]
+                r += fk
+                mx += fk * c[k, 0]
+                my += fk * c[k, 1]
+            rho[i, j] = r
+            if r > 0:
+                ux[i, j] = mx / r
+                uy[i, j] = my / r
+            else:
+                ux[i, j] = 0.0
+                uy[i, j] = 0.0
 
-@njit(parallel=True)
-def collide(f, rho, ux, uy, tau):
+@njit
+def collide_inplace(f, rho, ux, uy, tau):
     """
-    BGK collision operator.
+    BGK collision operator (in-place).
+    Modifies f directly to avoid allocating a new array.
 
     Parameters:
-        f:   pre-collision distributions, shape (9, Nx, Ny)
+        f:   distributions, shape (9, Nx, Ny) — modified in-place
         rho: density, shape (Nx, Ny)
         ux:  x-velocity, shape (Nx, Ny)
         uy:  y-velocity, shape (Nx, Ny)
         tau: relaxation time (scalar)
-
-    Returns:
-        f_out: post-collision distributions, shape (9, Nx, Ny)
     """
-
-    f_out = f - (1/tau) * (f - equilibrium(rho, ux, uy))
-    return f_out
+    feq = equilibrium(rho, ux, uy)
+    inv_tau = 1.0 / tau
+    for k in range(9):
+        for i in range(f.shape[1]):
+            for j in range(f.shape[2]):
+                f[k, i, j] -= inv_tau * (f[k, i, j] - feq[k, i, j])
 
 @njit(parallel=True)
-def stream(f):
+def stream(f, f_out):
     """
     Stream distributions to neighboring nodes.
-
-    Each f_i is shifted by its corresponding lattice velocity c_i.
-    f_i(x + c_i, t+1) = f_i(x, t)
-
-    Performs a roll with modular indexing, boundary conditions applied later.
+    Writes into pre-allocated f_out buffer to avoid allocation overhead.
 
     Parameters:
-        f: post-collision distributions, shape (9, Nx, Ny)
-
-    Returns:
-        f_streamed: post-streaming distributions, shape (9, Nx, Ny)
+        f:     post-collision distributions, shape (9, Nx, Ny)
+        f_out: pre-allocated output buffer, shape (9, Nx, Ny)
     """
-    # np.roll with axis is unsupported in numba; using modular index arithmetic instead.
     Nx, Ny = f.shape[1], f.shape[2]
-    f_streamed = np.empty_like(f)
     for k in prange(9):
         cx = c[k, 0]
         cy = c[k, 1]
@@ -251,8 +262,7 @@ def stream(f):
             ni = (i + cx) % Nx
             for j in range(Ny):
                 nj = (j + cy) % Ny
-                f_streamed[k, ni, nj] = f[k, i, j]
-    return f_streamed
+                f_out[k, ni, nj] = f[k, i, j]
 
 @njit
 def apply_wall_bc(f, f_prev):
@@ -320,7 +330,7 @@ def apply_outlet_bc(f):
     f[7, -1, :] = f[5, -1, :] - (1/6) * rho_out * ux + 0.5 * (f[2, -1, :] - f[4, -1, :])
     f[6, -1, :] = f[8, -1, :] - (1/6) * rho_out * ux - 0.5 * (f[2, -1, :] - f[4, -1, :])
 
-@njit
+@njit(parallel=True)
 def apply_cylinder_bc(f, f_prev, bl_i, bl_j, bl_k, bl_q):
     """
     Bouzidi interpolated bounce-back for the cylinder.
@@ -330,7 +340,7 @@ def apply_cylinder_bc(f, f_prev, bl_i, bl_j, bl_k, bl_q):
         bl_i, bl_j, bl_k: fluid node coordinates and direction index, shape (n,)
         bl_q:             fractional wall distance, shape (n,)
     """
-    for idx in range(bl_i.shape[0]):
+    for idx in prange(bl_i.shape[0]):
         i = bl_i[idx]
         j = bl_j[idx]
         k = bl_k[idx]
@@ -338,15 +348,28 @@ def apply_cylinder_bc(f, f_prev, bl_i, bl_j, bl_k, bl_q):
         k_opp = opp[k]
 
         if q < 0.5:
-            # Interpolate between the fluid node and its upstream neighbor
-            ii = i - c[k, 0]  # upstream node (opposite to solid direction)
+            ii = i - c[k, 0]
             jj = j - c[k, 1]
             f[k_opp, i, j] = (2*q * f_prev[k, i, j]
                               + (1 - 2*q) * f_prev[k, ii, jj])
         else:
-            # Interpolate between post-collision outgoing and incoming at same node
             f[k_opp, i, j] = (1/(2*q) * f_prev[k, i, j]
                               + (1 - 1/(2*q)) * f_prev[k_opp, i, j])
+
+@njit
+def zero_solid(f, solid_i, solid_j):
+    """
+    Zero out distributions at solid nodes using precomputed index arrays.
+
+    Parameters:
+        f:                 distributions, shape (9, Nx, Ny)
+        solid_i, solid_j:  coordinate arrays of solid nodes
+    """
+    for idx in range(solid_i.shape[0]):
+        i = solid_i[idx]
+        j = solid_j[idx]
+        for k in range(9):
+            f[k, i, j] = 0.0
 
 def parabolic_profile(Ny, u_max):
     """
@@ -364,7 +387,7 @@ def parabolic_profile(Ny, u_max):
     ux = u_max * 4 * y * (H - y) / H**2
     return ux
 
-def run(grid, num_steps, plot_every=100):
+def run(grid, num_steps, plot_every=100, plot=True, warmup_steps=0, plot_warmup=False):
     """
     Main simulation loop.
 
@@ -384,35 +407,51 @@ def run(grid, num_steps, plot_every=100):
     Parameters:
         num_steps:  total number of time steps
         plot_every: visualization interval
+        warmup_steps: number of steps to linearly ramp inlet velocity from 0 to u_lb
+        plot_warmup: whether to visualize during warmup phase (ramping inlet velocity)
+        plot: whether to visualize the flow (vorticity and speed)
     """
     profile = parabolic_profile(grid.Ny, grid.u_lb)
-    f = equilibrium(np.ones((grid.Nx, grid.Ny)), np.full((grid.Nx, grid.Ny), profile), np.zeros((grid.Nx, grid.Ny)))  # initial condition
+    # Initialize at rest — avoids acoustic shock from sudden cylinder obstruction
+    f = equilibrium(np.ones((grid.Nx, grid.Ny)), np.zeros((grid.Nx, grid.Ny)), np.zeros((grid.Nx, grid.Ny)))
     initial_noise = 1e-6 * (np.random.rand(*f.shape) - 0.5)  # small random noise to trigger vortex shedding
     f += initial_noise  # add small noise to trigger vortex shedding
     f[:, grid.solid] = 0
     bl_i, bl_j, bl_k, bl_q = grid.boundary_links
 
+    f_postcol = np.empty_like(f)
+    rho = np.empty((grid.Nx, grid.Ny))
+    ux = np.empty((grid.Nx, grid.Ny))
+    uy = np.empty((grid.Nx, grid.Ny))
+
     fig, axes = None, None
-    for step in tqdm(range(num_steps), desc="Simulating LBM"):
+    step = 0
+    for i in tqdm(range(num_steps + warmup_steps), desc="Running LBM simulation"):
+        step = i
         try:
-            rho, ux, uy = compute_macroscopic(f)
-            f_post = collide(f, rho, ux, uy, grid.tau)
-            f = stream(f_post)
-            apply_inlet_bc(f, profile)
+            # Ramp inlet velocity linearly to avoid initial acoustic shock
+            ramp = min(step / warmup_steps, 1.0) if warmup_steps > 0 else 1.0
+
+            compute_macroscopic(f, rho, ux, uy)
+            collide_inplace(f, rho, ux, uy, grid.tau)
+            f_postcol[:] = f
+            stream(f_postcol, f)
+            apply_inlet_bc(f, profile * ramp)
             apply_outlet_bc(f)
-            apply_wall_bc(f, f_post)
-            apply_cylinder_bc(f, f_post, bl_i, bl_j, bl_k, bl_q)
+            apply_wall_bc(f, f_postcol)
+            apply_cylinder_bc(f, f_postcol, bl_i, bl_j, bl_k, bl_q)
+            zero_solid(f, grid.solid_i, grid.solid_j)
         except FloatingPointError:
             print(f"Numerical instability at step {step}, stopping simulation.")
             break
-        f[:, grid.solid] = 0  # enforce zero distribution in solid nodes
 
-        if step % plot_every == 0:
-            rho_plot, ux_plot, uy_plot = compute_macroscopic(f)
-            fig, axes = plot_flow(ux_plot, uy_plot, grid.solid, step, fig, axes)
+        if plot and (plot_warmup or step >= warmup_steps) and (step - (warmup_steps if not plot_warmup else 0)) % plot_every == 0:
+            compute_macroscopic(f, rho, ux, uy)
+            fig, axes = plot_flow(ux, uy, grid.solid, step - warmup_steps, fig, axes)
 
-    plt.ioff()
-    plt.show()
+    if plot:
+        plt.ioff()
+        plt.show()
 
 def plot_flow(ux, uy, solid_mask, step, fig=None, axes=None):
     """
@@ -435,11 +474,10 @@ def plot_flow(ux, uy, solid_mask, step, fig=None, axes=None):
     vorticity = np.where(solid_mask, np.nan, vorticity)
     speed = np.where(solid_mask, np.nan, speed)
 
-    # Symmetric vorticity limits for diverging colormap
-    vlim = max(np.nanmax(np.abs(vorticity)) * 0.8, 1e-10)
-    smax = max(np.nanmax(speed), 1e-10)
-
     if fig is None:
+        vlim = grid.u_lb * 0.5  # limit vorticity color scale to a reasonable range
+        smax = grid.u_lb * 2.0  # limit speed color scale to inlet velocity range
+
         plt.rcParams.update({
             'font.family': 'sans-serif',
             'font.sans-serif': ['Arial', 'Helvetica'],
@@ -449,19 +487,20 @@ def plot_flow(ux, uy, solid_mask, step, fig=None, axes=None):
         })
         fig, axes = plt.subplots(2, 1, figsize=(10, 4),
                                  gridspec_kw={'hspace': 0.35})
-        # Vorticity panel
         axes[0].im = axes[0].imshow(
             vorticity.T, origin='lower', cmap='RdBu_r',
-            vmin=-vlim, vmax=vlim, aspect='equal', interpolation='bilinear')
+            vmin=-vlim, vmax=vlim, aspect='equal', interpolation='bilinear',
+            animated=True)
         fig.colorbar(axes[0].im, ax=axes[0], label='Vorticity (1/s)',
                      shrink=0.8, pad=0.02)
         axes[0].set_ylabel('y (lattice units)')
-        axes[0].set_title(f'Vorticity  |  step {step}', fontweight='bold')
+        axes[0].title_text = axes[0].set_title(f'Vorticity  |  step {step}', fontweight='bold')
+        axes[0].title_text.set_animated(True)
 
-        # Velocity magnitude panel
         axes[1].im = axes[1].imshow(
             speed.T, origin='lower', cmap='viridis',
-            vmin=0, vmax=smax, aspect='equal', interpolation='bilinear')
+            vmin=0, vmax=smax, aspect='equal', interpolation='bilinear',
+            animated=True)
         fig.colorbar(axes[1].im, ax=axes[1], label='|u| (lattice units)',
                      shrink=0.8, pad=0.02)
         axes[1].set_xlabel('x (lattice units)')
@@ -470,24 +509,27 @@ def plot_flow(ux, uy, solid_mask, step, fig=None, axes=None):
 
         plt.ion()
         fig.show()
+        fig.canvas.draw()
+        fig._bg = fig.canvas.copy_from_bbox(fig.bbox)
     else:
-        # Update existing images
         axes[0].im.set_data(vorticity.T)
-        axes[0].im.set_clim(-vlim, vlim)
-        axes[0].set_title(f'Vorticity  |  step {step}', fontweight='bold')
+        axes[0].title_text.set_text(f'Vorticity  |  step {step}')
 
         axes[1].im.set_data(speed.T)
-        axes[1].im.set_clim(0, smax)
 
-        fig.canvas.draw_idle()
+        fig.canvas.restore_region(fig._bg)
+        axes[0].draw_artist(axes[0].im)
+        axes[0].draw_artist(axes[0].title_text)
+        axes[1].draw_artist(axes[1].im)
+        fig.canvas.blit(fig.bbox)
         fig.canvas.flush_events()
 
     return fig, axes
 
 if __name__ == "__main__":
     np.seterr(all='raise')  # raise exceptions on numerical issues (e.g. NaN, inf)
-    Re = 100
-    N = 35
+    Re = 200
+    N = 50
     u_lb = 0.1
     grid = Grid(Re, N, u_lb)
-    run(grid, num_steps=10000, plot_every=10)
+    run(grid, num_steps=10000, warmup_steps=grid.Nx, plot_every=10, plot=True, plot_warmup=True)
