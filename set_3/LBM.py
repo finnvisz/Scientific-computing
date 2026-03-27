@@ -368,14 +368,18 @@ def run(grid, num_steps, plot_every=100):
     f += initial_noise  # add small noise to trigger vortex shedding
     f[:, grid.solid] = 0
     fig, axes = None, None
-    for step in tqdm(range(num_steps)):
-        rho, ux, uy = compute_macroscopic(f)
-        f_post = collide(f, rho, ux, uy, grid.tau)
-        f = stream(f_post)
-        apply_inlet_bc(f, profile)
-        apply_outlet_bc(f)
-        apply_wall_bc(f, f_post)
-        apply_cylinder_bc(f, f_post, grid.boundary_links)
+    for step in tqdm(range(num_steps), desc="Simulating LBM"):
+        try:
+            rho, ux, uy = compute_macroscopic(f)
+            f_post = collide(f, rho, ux, uy, grid.tau)
+            f = stream(f_post)
+            apply_inlet_bc(f, profile)
+            apply_outlet_bc(f)
+            apply_wall_bc(f, f_post)
+            apply_cylinder_bc(f, f_post, grid.boundary_links)
+        except FloatingPointError:
+            print(f"Numerical instability at step {step}, stopping simulation.")
+            break
         f[:, grid.solid] = 0  # enforce zero distribution in solid nodes
 
         if step % plot_every == 0:
@@ -456,8 +460,9 @@ def plot_flow(ux, uy, solid_mask, step, fig=None, axes=None):
     return fig, axes
 
 if __name__ == "__main__":
-    Re = 125
+    np.seterr(all='raise')  # raise exceptions on numerical issues (e.g. NaN, inf)
+    Re = 75
     N = 20
-    u_lb = 0.08
+    u_lb = 0.1
     grid = Grid(Re, N, u_lb)
-    run(grid, num_steps=10000, plot_every=10)
+    run(grid, num_steps=20000, plot_every=10)
