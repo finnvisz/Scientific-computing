@@ -1,0 +1,8 @@
+matplotlib==3.10.8
+numba==0.64.0
+numpy==2.4.4
+pandas==3.0.1
+Pillow==12.1.1
+PyYAML==6.0.3
+scipy==1.17.1
+tqdm==4.67.1

@@ -7,34 +7,6 @@ import time
 import pandas as pd
 import csv
 
-def draw_floorplan():
-    """0 means air, 1 means wall"""
-    with open('floorplan.yaml', 'r') as f:
-        data = yaml.safe_load(f)['floorplan']
-
-    plt.figure(figsize=(10, 8))
-
-    # 2. Draw the Walls
-    for wall in data['walls']:
-        x_coords = [wall['start'][0], wall['end'][0]]
-        y_coords = [wall['start'][1], wall['end'][1]]
-        plt.plot(x_coords, y_coords, color='black', linewidth=3)
-
-    # 3. Label the Rooms
-    for room in data['rooms']:
-        # Calculate center of the room for the label
-        center_x = room['x'] + (room['width'] / 2)
-        center_y = room['y'] + (room['height'] / 2)
-        plt.text(center_x, center_y, room['name'].replace('_', ' ').title(), 
-                ha='center', va='center', fontsize=9, fontweight='bold', color='blue')
-
-    # Formatting the plot
-    plt.gca().set_aspect('equal', adjustable='box')
-    plt.grid(True, linestyle='--', alpha=0.6)
-    plt.title("2D Floorplan Preview")
-    plt.xlabel("Meters (X)")
-    plt.ylabel("Meters (Y)")
-    plt.show()
 
 def create_floorplan(res):
     with open("floorplan.yaml") as f:
@@ -102,11 +74,11 @@ def get_source_term(x, y, x_router, y_router, A=10**4, sigma=0.2):
 def calculate_wavenumber(frequency=2.4*10**9):
     return 2 * np.pi * frequency / (3*10**8)
 
-def solve_Helmholtz_equation(grid, res, x_router, y_router):
+def solve_Helmholtz_equation(grid, res, freq, x_router, y_router):
     h = res 
     rows, cols = grid.shape
     N = rows * cols
-    k0 = calculate_wavenumber()
+    k0 = calculate_wavenumber(freq * 10 ** 9)
     
     A = lil_matrix((N, N), dtype=complex)
     f = np.zeros(N, dtype=complex)
@@ -197,7 +169,7 @@ def evaluate_average_strength(u_field, res):
 ### Plotting ############
 #########################
 
-def visualize_results(grid, u_field, router):
+def visualize_results(grid, u_field, router, res, freq):
     magnitude = np.abs(u_field)
     signal_db = 20 * np.log10(magnitude + 1e-9)
 
@@ -206,9 +178,26 @@ def visualize_results(grid, u_field, router):
     # Heatmap
     img = plt.imshow(signal_db, origin='lower', cmap='jet', extent=[0, 10, 0, 8])
 
-    plt.title(f'freqency=2.4 GHz, resolution={res}',fontsize=10)
+    plt.title(f'freqency={freq} GHz, resolution={res}',fontsize=10)
     plt.suptitle('Wifi coverage',fontsize=15)
     plt.colorbar(img, label='Signal Strength (dB)')
+
+
+    plt.scatter(router[0], router[1], marker='x', color='black', zorder=16, label = 'router')
+
+
+    plt.scatter(5, 1, marker='o', s=50, color='black', 
+                label='Measurement Points', zorder=8)
+
+    # 2. Plot the rest without labels (so they don't repeat in the legend)
+    other_points = [[1, 1], [2, 7], [9, 7]]
+    for p in other_points:
+        plt.scatter(p[0], p[1], marker='o', s=50, color='black', zorder=8)
+
+    # 3. Add the 5cm circles (optional but good for the report)
+    for p in [[5, 1], [1, 1], [2, 7], [9, 7]]:
+        circle = plt.Circle((p[0], p[1]), 0.05, color='white', alpha=0.3, zorder=7)
+        plt.gca().add_patch(circle)
 
     # Walls overlay
     wall_mask = (grid == "wall").astype(float)
@@ -224,33 +213,65 @@ def visualize_results(grid, u_field, router):
     plt.ylabel("Meters (Y)")
 
     plt.tight_layout(rect=[0, 0.05, 1, 1])
-    plt.savefig(f"wififigs/wifi_coverage_router={router}.png")
+    plt.legend()
+    plt.savefig(f"wififigs/wifi_coverage_freq={freq}_router={router}.png")
 
 #########################
 ### Optimization ########
 #########################
 def is_location_legal(x, y, grid, res, min_dist=0.5):
-    """Checks if the router position is valid based on rules."""
-    # Rule 1: Not inside a wall
-    r_idx, c_idx = int(y / res), int(x / res)
-    if grid[r_idx, c_idx] == 'wall':
-        return False
+    """
+    Checks if the router position is valid based on updated constraints:
+    1. Not inside a wall (center-line check).
+    2. At least 0.5m away from measurement points.
+    3. 20cm buffer from 15cm-thick outer walls (Bounds: 0.35 to 9.65, 0.35 to 7.65).
+    4. 20cm buffer from 15cm-thick interior walls (0.275m from center-line).
+    """
     
-    # Rule 2: At least 0.5m away from measurement points
-    locations = [
-        (1.0, 5.0), # Living Room
-        (2.0, 1.0), # Kitchen
-        (9.0, 1.0), # Bathroom
-        (9.0, 7.0)  # Bedroom 1
+    # --- Constraint 1: Outer Wall Thickness (15cm) + 20cm Buffer ---
+    # Total offset from 0,0 and 10,8 is 0.35m
+    if not (0.35 <= x <= 9.65 and 0.35 <= y <= 7.65):
+        return False
+
+    # --- Constraint 2: Not inside a wall (Grid-based check) ---
+    r_idx, c_idx = int(y / res), int(x / res)
+    # Bounds check to prevent IndexErrors near the edges
+    if 0 <= r_idx < grid.shape[0] and 0 <= c_idx < grid.shape[1]:
+        if grid[r_idx, c_idx] == 'wall':
+            return False
+    else:
+        return False # Outside grid is illegal
+
+    # --- Constraint 3: Interior Wall Surface Buffer (20cm) ---
+    interior_walls = [
+        ([0, 3], [3, 3]), ([4, 3], [6, 3]), ([7, 3], [10, 3]), # y=3 segments
+        ([2.5, 0], [2.5, 2]), ([6, 3], [6, 8]),               # Verticals
+        ([7, 0], [7, 1.5]), ([7, 2.5], [7, 3])                # Bathroom Door
     ]
-    for mx, my in locations:
+    
+    for start, end in interior_walls:
+        # Distance from point (x,y) to line segment
+        p1, p2 = np.array(start), np.array(end)
+        p3 = np.array([x, y])
+        # Vector logic for segment distance
+        d = p2 - p1
+        if np.linalg.norm(d) > 0:
+            t = np.clip(np.dot(p3 - p1, d) / np.dot(d, d), 0, 1)
+            projection = p1 + t * d
+            dist_to_int_wall = np.linalg.norm(p3 - projection)
+            if dist_to_int_wall < 0.275:
+                return False
+
+    # --- Constraint 4: At least 0.5m away from measurement points ---
+    meas_locations = [(5.0, 1.0), (1.0, 1.0), (2.0, 7.0), (9.0, 7.0)]
+    for mx, my in meas_locations:
         dist = np.sqrt((x - mx)**2 + (y - my)**2)
         if dist < min_dist:
             return False
             
     return True
 
-def optimization(grid, res, x_routers, y_routers):
+def optimization(grid, res, freq, x_routers, y_routers):
     results = []
     total_spots = len(x_routers) * len(y_routers)
     
@@ -266,7 +287,7 @@ def optimization(grid, res, x_routers, y_routers):
             # ONLY solve if the location is legal
             if is_location_legal(x, y, grid, res):
                 try:
-                    u_field = solve_Helmholtz_equation(grid, res, x_router=x, y_router=y)
+                    u_field = solve_Helmholtz_equation(grid, res, freq, x_router=x, y_router=y)
                     print('location router:', (x,y))
                     score = evaluate_average_strength(u_field, res)
                     results.append({
@@ -288,11 +309,11 @@ def optimization(grid, res, x_routers, y_routers):
     top_positions = df.sort_values(by="Average Strength [dB]", ascending=False).head(10)
     
     print(f"\nOptimization complete in {(time.time() - start_time_all)/60:.2f} minutes.")
-    print("\n--- TOP 10 LEGAL ROUTER LOCATIONS ---")
+    print(f"\n--- TOP 10 LEGAL ROUTER LOCATIONS FREQUENCY {freq} ---")
     print(top_positions.to_string(index=False))
     
     # Save results to CSV so you don't lose them
-    df.to_csv("router_optimization_results.csv", index=False)
+    df.to_csv(f"router_optimization_results_freq{freq}.csv", index=False)
 
     return df
 
@@ -304,22 +325,23 @@ def optimization(grid, res, x_routers, y_routers):
 
 # test multiple locations
 
-# res = 0.03
+# res = 0.01
+# freq =2.4
 # offset = 0.015
-# x_routers = np.arange(0.2, 9.9, 0.1)
-# y_routers = np.arange(0.2, 7.9, 0.1)
+# x_routers = np.arange(2.0, 2.7, 0.1)
+# y_routers = np.arange(2.7, 3.0, 0.1)
 
 # grid = create_floorplan(res)
-# results_df = optimization(grid, res, x_routers, y_routers)
+# results_df = optimization(grid, res, freq, x_routers, y_routers)
 
-# test one location
+# # test one location
 
 res = 0.01
-x_router = 3
-y_router = 5
+freq = 2.4
+x_router = 6.7
+y_router = 2.6
 grid = create_floorplan(res)
-u_field = solve_Helmholtz_equation(grid, res, x_router, y_router)
-visualize_results(grid, u_field,(x_router,y_router))
+u_field = solve_Helmholtz_equation(grid, res, freq, x_router, y_router)
+visualize_results(grid, u_field,(x_router,y_router), res, freq)
 print('avg strength:', evaluate_average_strength(u_field, res))
-
 
