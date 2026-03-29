@@ -32,6 +32,26 @@ Output:
 
 Requires `numba` for JIT compilation of the solver kernels.
 
+## Running FEM.ipynb (Finite Element)
+Requires NGSolve and Netgen installed in your environment.
+
+Run the cells sequentially in Jupyter:
+```bash
+jupyter notebook FEM.ipynb
+```
+
+Parameters (set in Cell 3):
+- `nu`: kinematic viscosity (default: 0.00007, giving Re_D ≈ 2143)
+- `tau`: time step (default: 0.0075 s)
+- `tend`: simulation end time (default: 10 s)
+- `maxh`: global mesh size (set in Cell 2, default: 0.025 m)
+
+The notebook uses the NGSolve GUI for live visualisation (`netgen.gui` + `%gui tk`), so it must be run in a local Jupyter session, not in VS Code or JupyterLab headless mode.
+
+Output:
+- `cfd_animation.gif` — velocity magnitude animation
+- `frames/fem_frame_XXXX.png` — 6 evenly-spaced snapshots for the report
+
 ## Running LBM.py
 
 ```bash
