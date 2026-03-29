@@ -12,6 +12,7 @@ Cylinder: Interpolated bounce-back (Bouzidi et al.)
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
 from numba import njit, prange
 from tqdm import tqdm
 
@@ -21,6 +22,7 @@ H_phys = 0.41       # domain height [m] (0.15 + 0.1 + 0.16)
 D_phys = 0.1        # cylinder diameter [m]
 cx_phys = 0.15      # cylinder center x [m] (from left wall)
 cy_phys = 0.20      # cylinder center y [m] (0.15m from bottom + 0.05m radius)
+U_phys = 1.0       # max inlet velocity [m/s] (sets time scale)
 
 # 9 discrete velocities for 2D lattice Boltzmann.
 # Index ordering: 0=rest, 1=E, 2=N, 3=W, 4=S, 5=NE, 6=NW, 7=SW, 8=SE
@@ -68,26 +70,29 @@ class Grid:
     def __init__(self, Re, N, u_lb=0.08):
         """
         Parameters:
-            Re:   Reynolds number (Re = U * D / nu)
-            N:    lattice nodes across cylinder diameter (resolution control)
-            u_lb: max inlet velocity in lattice units (0.04-0.1 for stability)
+            Re:     Reynolds number (Re = U * D / nu)
+            N:      lattice nodes across cylinder diameter (resolution control)
+            u_lb:   max inlet velocity in lattice units (0.04-0.1 for stability)
+            U_phys: physical max inlet velocity [m/s] (sets the time scale)
         """
         self.Re = Re
         self.N = N
         self.u_lb = u_lb
+        self.U_phys = U_phys
 
         # Lattice spacing
-        self.dx = self.D_phys / N
+        self.dx = D_phys / N
 
         # Grid dimensions
-        self.Nx = int(self.L_phys / self.dx)
-        self.Ny = int(self.H_phys / self.dx)
-        if self.Ny == (self.H_phys / self.dx) -1:
-            self.Ny += 1  # handle floating point rounding that can cause off-by-one in Ny
+        self.Nx = int(L_phys / self.dx)
+        self.Ny = int(H_phys / self.dx) + 1 # +1 to account for the integer division truncation
+
+        # Physical time step: u_lb = U_phys * dt / dx  →  dt = u_lb * dx / U_phys
+        self.dt = u_lb * self.dx / U_phys
 
         # Cylinder center and radius in lattice units
-        self.cx_lat = self.cx_phys / self.dx
-        self.cy_lat = self.cy_phys / self.dx
+        self.cx_lat = cx_phys / self.dx
+        self.cy_lat = cy_phys / self.dx
         self.R_lat = N / 2
 
         # Kinematic viscosity and relaxation time
@@ -111,6 +116,7 @@ class Grid:
 
         print(f"Grid: {self.Nx} x {self.Ny}, tau = {self.tau:.4f}, "
               f"nu_lb = {self.nu_lb:.6f}, Ma = {u_lb / (1/3)**0.5:.3f}, "
+              f"dx = {self.dx:.4e} m, dt = {self.dt:.4e} s, "
               f"boundary links = {self.boundary_links[0].shape[0]}")
 
     def _compute_boundary_links(self):
@@ -126,7 +132,7 @@ class Grid:
                       1 = wall at the solid node)
         """
         links = []
-        for i in range(self.Nx):
+        for i in tqdm(range(self.Nx), desc="Computing cylinder boundary links"):
             for j in range(self.Ny):
                 if self.solid[i, j]:
                     continue  # skip solid nodes
@@ -194,7 +200,7 @@ def equilibrium(rho, ux, uy):
     feq = w9 * rho * (1 + cu/cs2 + cu**2/(2*cs2**2) - usq/(2*cs2))
     return feq
 
-@njit
+@njit(parallel=True)
 def compute_macroscopic(f, rho, ux, uy):
     """
     Compute macroscopic density and velocity from distribution functions.
@@ -208,7 +214,7 @@ def compute_macroscopic(f, rho, ux, uy):
     """
     Nx = f.shape[1]
     Ny = f.shape[2]
-    for i in range(Nx):
+    for i in prange(Nx):
         for j in range(Ny):
             r = 0.0
             mx = 0.0
@@ -226,7 +232,7 @@ def compute_macroscopic(f, rho, ux, uy):
                 ux[i, j] = 0.0
                 uy[i, j] = 0.0
 
-@njit
+@njit(parallel=True)
 def collide_inplace(f, rho, ux, uy, tau):
     """
     BGK collision operator (in-place).
@@ -241,7 +247,7 @@ def collide_inplace(f, rho, ux, uy, tau):
     """
     feq = equilibrium(rho, ux, uy)
     inv_tau = 1.0 / tau
-    for k in range(9):
+    for k in prange(9):
         for i in range(f.shape[1]):
             for j in range(f.shape[2]):
                 f[k, i, j] -= inv_tau * (f[k, i, j] - feq[k, i, j])
@@ -389,7 +395,7 @@ def parabolic_profile(Ny, u_max):
     ux = u_max * 4 * y * (H - y) / H**2
     return ux
 
-def run(grid, num_steps, plot_every=100, plot=True, warmup_steps=0, plot_warmup=False):
+def run(grid, t_ms, fps=30, plot=True, plot_warmup=False, animation_file=None):
     """
     Main simulation loop.
 
@@ -407,12 +413,22 @@ def run(grid, num_steps, plot_every=100, plot=True, warmup_steps=0, plot_warmup=
         7. Periodically visualize / save results
 
     Parameters:
-        num_steps:  total number of time steps
-        plot_every: visualization interval
-        warmup_steps: number of steps to linearly ramp inlet velocity from 0 to u_lb
-        plot_warmup: whether to visualize during warmup phase (ramping inlet velocity)
-        plot: whether to visualize the flow (vorticity and speed)
+        t_ms:          physical simulation time [ms]
+        fps:           target frames per second for visualization/animation
+        plot_warmup:   whether to visualize during warmup phase
+        plot:          whether to visualize the flow (vorticity and speed)
+        animation_file: if set, store frames and save animation to this file
+                        instead of real-time rendering (requires ffmpeg for .mp4
+                        or Pillow for .gif)
     """
+    dt = grid.dt
+    num_steps = int(round(t_ms * 1e-3 / dt))
+    warmup_steps = grid.Nx
+    plot_every = max(1, int(round(1.0 / (dt * fps))))
+    print(f"Simulation: {num_steps} steps ({t_ms} ms), "
+          f"warmup: {warmup_steps} steps ({warmup_steps * dt * 1e3:.1f} ms), "
+          f"plot every {plot_every} steps ({plot_every * dt * 1e3:.2f} ms), "
+          f"{int(num_steps / plot_every + 1)} frames @ {fps} fps")
     profile = parabolic_profile(grid.Ny, grid.u_lb)
     # Initialize at rest — avoids acoustic shock from sudden cylinder obstruction
     f = equilibrium(np.ones((grid.Nx, grid.Ny)), np.zeros((grid.Nx, grid.Ny)), np.zeros((grid.Nx, grid.Ny)))
@@ -427,8 +443,10 @@ def run(grid, num_steps, plot_every=100, plot=True, warmup_steps=0, plot_warmup=
     uy = np.empty((grid.Nx, grid.Ny))
 
     fig, axes = None, None
+    frames = [] if animation_file else None
     step = 0
-    for i in tqdm(range(num_steps + warmup_steps), desc="Running LBM simulation"):
+    should_plot = plot and not animation_file
+    for i in tqdm(range(num_steps + warmup_steps + 1), desc="Running LBM simulation"): # one extra step to capture final frame
         step = i
         try:
             # Ramp inlet velocity linearly to avoid initial acoustic shock
@@ -443,43 +461,126 @@ def run(grid, num_steps, plot_every=100, plot=True, warmup_steps=0, plot_warmup=
             apply_wall_bc(f, f_postcol)
             apply_cylinder_bc(f, f_postcol, bl_i, bl_j, bl_k, bl_q)
             zero_solid(f, grid.solid_i, grid.solid_j)
-            if plot and (plot_warmup or step >= warmup_steps) and (step - (warmup_steps if not plot_warmup else 0)) % plot_every == 0:
+            if (plot_warmup or step >= warmup_steps) and (step - (warmup_steps if not plot_warmup else 0)) % plot_every == 0:
                 compute_macroscopic(f, rho, ux, uy)
-                fig, axes = plot_flow(ux, uy, grid.solid, step - warmup_steps, fig, axes)
+                if animation_file:
+                    t_phys = (step - warmup_steps) * grid.dt
+                    frames.append((ux.copy(), uy.copy(), t_phys))
+                elif should_plot:
+                    t_phys = (step - warmup_steps) * grid.dt
+                    fig, axes = plot_flow(ux, uy, grid, t_phys, fig, axes)
         except FloatingPointError:
             print(f"Numerical instability at step {step}, stopping simulation.")
             break
 
-
-    if plot:
-        plot_flow(ux, uy, grid.solid, step - warmup_steps, fig, axes)
+    if animation_file:
+        print(f"Rendering animation with {len(frames)} frames...")
+        save_animation(frames, grid, animation_file, fps=fps)
+    elif should_plot:
+        t_phys = (step - warmup_steps) * grid.dt
+        plot_flow(ux, uy, grid, t_phys, fig, axes)
         plt.ioff()
         plt.show()
 
-def plot_flow(ux, uy, solid_mask, step, fig=None, axes=None):
+def save_animation(frames, grid, filename, fps=60):
+    """
+    Render stored frames into an animation and save to file.
+
+    Parameters:
+        frames:   list of (ux, uy, step) tuples
+        grid:     Grid object (for solid mask and color scale limits)
+        filename: output file path (.mp4, .gif, etc.)
+        fps:      frames per second in the output animation
+    """
+    dx = grid.dx
+    vel_scale = dx / grid.dt  # lattice velocity → m/s
+    vort_scale = 1.0 / grid.dt  # lattice vorticity → 1/s
+    extent = [0, grid.Nx * dx, 0, grid.Ny * dx]  # [x_min, x_max, y_min, y_max] in meters
+
+    vlim = grid.u_lb * vort_scale * 0.5
+    smax = grid.U_phys * 2.0
+
+    plt.rcParams.update({
+        'font.family': 'sans-serif',
+        'font.sans-serif': ['Arial', 'Helvetica'],
+        'font.size': 8,
+        'axes.labelsize': 9,
+        'axes.titlesize': 10,
+    })
+    fig, axes = plt.subplots(2, 1, figsize=(10, 4), gridspec_kw={'hspace': 0.35})
+
+    ux0, uy0, t0 = frames[0]
+    vorticity = (np.gradient(uy0, axis=0) - np.gradient(ux0, axis=1)) * vort_scale
+    speed = np.sqrt(ux0**2 + uy0**2) * vel_scale
+    vorticity = np.where(grid.solid, np.nan, vorticity)
+    speed = np.where(grid.solid, np.nan, speed)
+
+    im_vort = axes[0].imshow(vorticity.T, origin='lower', cmap='RdBu_r',
+                             vmin=-vlim, vmax=vlim, aspect='equal', interpolation='bilinear',
+                             extent=extent)
+    fig.colorbar(im_vort, ax=axes[0], label='Vorticity (1/s)', shrink=0.8, pad=0.02)
+    axes[0].set_ylabel('y (m)')
+    title = axes[0].set_title(f'Vorticity  |  t = {t0:.4f} s', fontweight='bold')
+
+    im_speed = axes[1].imshow(speed.T, origin='lower', cmap='viridis',
+                              vmin=0, vmax=smax, aspect='equal', interpolation='bilinear',
+                              extent=extent)
+    fig.colorbar(im_speed, ax=axes[1], label='|u| (m/s)', shrink=0.8, pad=0.02)
+    axes[1].set_xlabel('x (m)')
+    axes[1].set_ylabel('y (m)')
+    axes[1].set_title('Velocity magnitude', fontweight='bold')
+
+    def update(frame_idx):
+        ux_f, uy_f, t_f = frames[frame_idx]
+        vort = (np.gradient(uy_f, axis=0) - np.gradient(ux_f, axis=1)) * vort_scale
+        spd = np.sqrt(ux_f**2 + uy_f**2) * vel_scale
+        vort = np.where(grid.solid, np.nan, vort)
+        spd = np.where(grid.solid, np.nan, spd)
+        im_vort.set_data(vort.T)
+        im_speed.set_data(spd.T)
+        title.set_text(f'Vorticity  |  t = {t_f:.4f} s')
+        return im_vort, im_speed, title
+
+    with tqdm(total=len(frames), desc="Rendering animation", unit="frame", leave=False) as pbar:
+        def update_tracked(frame_idx):
+            result = update(frame_idx)
+            pbar.update(1)
+            return result
+        anim = FuncAnimation(fig, update_tracked, frames=len(frames), blit=True, interval=1000//fps)
+        anim.save(filename, fps=fps)
+    plt.close(fig)
+    print(f"Animation saved to {filename}")
+
+
+def plot_flow(ux, uy, grid, t_phys, fig=None, axes=None):
     """
     Two-panel visualization: vorticity (top) and velocity magnitude (bottom).
 
     Parameters:
-        ux, uy:     velocity fields, shape (Nx, Ny)
-        solid_mask: boolean mask, shape (Nx, Ny)
-        step:       current time step (for title)
-        fig, axes:  existing figure/axes for live updating (None to create new)
+        ux, uy:  velocity fields in lattice units, shape (Nx, Ny)
+        grid:    Grid object (for solid mask and unit conversion)
+        t_phys:  current physical time [s]
+        fig, axes: existing figure/axes for live updating (None to create new)
 
     Returns:
         fig, axes:  for reuse in subsequent calls
     """
-    # Compute derived fields
-    vorticity = np.gradient(uy, axis=0) - np.gradient(ux, axis=1)
-    speed = np.sqrt(ux**2 + uy**2)
+    dx = grid.dx
+    vel_scale = dx / grid.dt
+    vort_scale = 1.0 / grid.dt
+    extent = [0, grid.Nx * dx, 0, grid.Ny * dx]
+
+    # Compute derived fields in physical units
+    vorticity = (np.gradient(uy, axis=0) - np.gradient(ux, axis=1)) * vort_scale
+    speed = np.sqrt(ux**2 + uy**2) * vel_scale
 
     # Mask solid nodes with NaN for clean rendering
-    vorticity = np.where(solid_mask, np.nan, vorticity)
-    speed = np.where(solid_mask, np.nan, speed)
+    vorticity = np.where(grid.solid, np.nan, vorticity)
+    speed = np.where(grid.solid, np.nan, speed)
 
     if fig is None:
-        vlim = grid.u_lb * 0.5  # limit vorticity color scale to a reasonable range
-        smax = grid.u_lb * 2.0  # limit speed color scale to inlet velocity range
+        vlim = grid.u_lb * vort_scale * 0.5
+        smax = grid.U_phys * 2.0
 
         plt.rcParams.update({
             'font.family': 'sans-serif',
@@ -493,21 +594,21 @@ def plot_flow(ux, uy, solid_mask, step, fig=None, axes=None):
         axes[0].im = axes[0].imshow(
             vorticity.T, origin='lower', cmap='RdBu_r',
             vmin=-vlim, vmax=vlim, aspect='equal', interpolation='bilinear',
-            animated=True)
+            extent=extent, animated=True)
         fig.colorbar(axes[0].im, ax=axes[0], label='Vorticity (1/s)',
                      shrink=0.8, pad=0.02)
-        axes[0].set_ylabel('y (lattice units)')
-        axes[0].title_text = axes[0].set_title(f'Vorticity  |  step {step}', fontweight='bold')
+        axes[0].set_ylabel('y (m)')
+        axes[0].title_text = axes[0].set_title(f'Vorticity  |  t = {t_phys:.4f} s', fontweight='bold')
         axes[0].title_text.set_animated(True)
 
         axes[1].im = axes[1].imshow(
             speed.T, origin='lower', cmap='viridis',
             vmin=0, vmax=smax, aspect='equal', interpolation='bilinear',
-            animated=True)
-        fig.colorbar(axes[1].im, ax=axes[1], label='|u| (lattice units)',
+            extent=extent, animated=True)
+        fig.colorbar(axes[1].im, ax=axes[1], label='|u| (m/s)',
                      shrink=0.8, pad=0.02)
-        axes[1].set_xlabel('x (lattice units)')
-        axes[1].set_ylabel('y (lattice units)')
+        axes[1].set_xlabel('x (m)')
+        axes[1].set_ylabel('y (m)')
         axes[1].set_title('Velocity magnitude', fontweight='bold')
 
         plt.ion()
@@ -516,7 +617,7 @@ def plot_flow(ux, uy, solid_mask, step, fig=None, axes=None):
         fig._bg = fig.canvas.copy_from_bbox(fig.bbox)
     else:
         axes[0].im.set_data(vorticity.T)
-        axes[0].title_text.set_text(f'Vorticity  |  step {step}')
+        axes[0].title_text.set_text(f'Vorticity  |  t = {t_phys:.4f} s')
 
         axes[1].im.set_data(speed.T)
 
@@ -531,8 +632,8 @@ def plot_flow(ux, uy, solid_mask, step, fig=None, axes=None):
 
 if __name__ == "__main__":
     np.seterr(all='raise')  # raise exceptions on numerical issues (e.g. NaN, inf)
-    Re = 500
-    N = 100
-    u_lb = 0.1
+    Re = 40
+    N = 35
+    u_lb = 0.1  
     grid = Grid(Re, N, u_lb)
-    run(grid, num_steps=20000, warmup_steps=grid.Nx, plot_every=10, plot=True, plot_warmup=True)
+    run(grid, t_ms=10000, plot=True, plot_warmup=False, animation_file='set_3/data/karman_vortex_street_n_35_re_40.mp4')
