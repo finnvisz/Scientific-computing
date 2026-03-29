@@ -633,8 +633,8 @@ def plot_flow(ux, uy, grid, t_phys, fig=None, axes=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--N", type=int, default=100)
-    parser.add_argument("--Re", type=float, default=25)
+    parser.add_argument("--N", type=int, default=25)
+    parser.add_argument("--Re", type=float, default=100)
     args = parser.parse_args()
 
     np.seterr(all='raise')  # raise exceptions on numerical issues (e.g. NaN, inf)
@@ -642,5 +642,5 @@ if __name__ == "__main__":
     N = args.N
     u_lb = 0.1
     grid = Grid(Re, N, u_lb)
-    animation_file = f'set_3/data/karman_vortex_street_n_{N}_re_{int(Re)}.mp4'
+    animation_file = f'data/karman_vortex_street_n_{N}_re_{int(Re)}.mp4'
     run(grid, t_ms=10000, plot=True, plot_warmup=False, animation_file=animation_file)
