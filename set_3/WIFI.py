@@ -6,6 +6,8 @@ from scipy.sparse.linalg import spsolve
 import time
 import pandas as pd
 import csv
+import argparse
+import sys
 
 
 def create_floorplan(res):
@@ -322,26 +324,38 @@ def optimization(grid, res, freq, x_routers, y_routers):
 #########################
 ### Running #############
 #########################
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="WiFi Helmholtz Simulation & Optimization")
 
-# test multiple locations
+    # Core Parameters
+    parser.add_argument("-res", type=float, default=0.01, help="Grid resolution (m)")
+    parser.add_argument("-freq", type=float, default=2.4, help="Frequency (GHz)")
+    
+    # Single Run Coordinates
+    parser.add_argument("-x", type=float, default=2.3, help="Single run Router X")
+    parser.add_argument("-y", type=float, default=2.7, help="Single run Router Y")
 
-# res = 0.01
-# freq =2.4
-# offset = 0.015
-# x_routers = np.arange(2.0, 2.7, 0.1)
-# y_routers = np.arange(2.7, 3.0, 0.1)
+    # Optimization Toggle
+    parser.add_argument("--optimize", action="store_true", help="Run full grid optimization")
+    parser.add_argument("-step", type=float, default=0.1, help="Optimization grid step (m)")
 
-# grid = create_floorplan(res)
-# results_df = optimization(grid, res, freq, x_routers, y_routers)
+    args = parser.parse_args()
+    grid = create_floorplan(args.res)
 
-# # test one location
-
-res = 0.01
-freq = 2.4
-x_router = 6.7
-y_router = 2.6
-grid = create_floorplan(res)
-u_field = solve_Helmholtz_equation(grid, res, freq, x_router, y_router)
-visualize_results(grid, u_field,(x_router,y_router), res, freq)
-print('avg strength:', evaluate_average_strength(u_field, res))
+    if args.optimize:
+        print(f"--- STARTING OPTIMIZATION (Step={args.step}m, Res={args.res}m) ---")
+        # Define ranges for the whole 10x8 apartment
+        x_range = np.arange(0.2, 10, args.step)
+        y_range = np.arange(0.2, 8, args.step)
+        
+        # Call your existing optimization function
+        optimization(grid, args.res, args.freq, x_range, y_range)
+    
+    else:
+        print(f"--- RUNNING SINGLE POSITION ({args.x}, {args.y}) ---")
+        if is_location_legal(args.x, args.y, grid, args.res):
+            u_field = solve_Helmholtz_equation(grid, args.res, args.freq, args.x, args.y)
+            visualize_results(grid, u_field, (args.x, args.y), args.res, args.freq)
+        else:
+            print(f"Location ({args.x}, {args.y}) is ILLEGAL.")
 

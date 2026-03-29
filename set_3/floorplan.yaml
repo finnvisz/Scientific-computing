@@ -1,0 +1,69 @@
+floorplan:
+  wall_thickness: 0.15
+  rooms:
+    - name: living_room
+      x: 0
+      y: 3
+      width: 6
+      height: 5
+
+    - name: kitchen
+      x: 0
+      y: 0
+      width: 2.5
+      height: 3
+
+    - name: bathroom
+      x: 7
+      y: 0
+      width: 3
+      height: 3
+      
+    - name: bedroom
+      x: 6
+      y: 3
+      width: 4
+      height: 5
+
+    - name: hall
+      x: 2.5
+      y: 0
+      width: 4.5
+      height: 3
+
+  walls:
+    outer_walls:
+      - start: [0, 0]
+        end: [10, 0]
+
+      - start: [10, 0]
+        end: [10, 8]
+
+      - start: [10, 8]
+        end: [0, 8]
+
+      - start: [0, 8]
+        end: [0, 0]
+
+    interior_walls:
+      - start: [0, 3]
+        end: [3, 3]
+
+      - start: [4, 3]
+        end: [6, 3]
+
+      - start: [7, 3]
+        end: [10, 3]
+
+      - start: [2.5, 0]
+        end: [2.5, 2]
+
+      - start: [6, 3]
+        end: [6, 8]
+
+      - start: [7, 0]
+        end: [7, 1.5]
+
+      - start: [7, 2.5]
+        end: [7, 3]
+
