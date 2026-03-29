@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from numba import njit, prange
 from tqdm import tqdm
+import argparse
 
 # Given physical parameters:
 L_phys = 2.2        # domain length [m]
@@ -631,9 +632,15 @@ def plot_flow(ux, uy, grid, t_phys, fig=None, axes=None):
     return fig, axes
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--N", type=int, default=100)
+    parser.add_argument("--Re", type=float, default=25)
+    args = parser.parse_args()
+
     np.seterr(all='raise')  # raise exceptions on numerical issues (e.g. NaN, inf)
-    Re = 40
-    N = 35
-    u_lb = 0.1  
+    Re = args.Re
+    N = args.N
+    u_lb = 0.1
     grid = Grid(Re, N, u_lb)
-    run(grid, t_ms=10000, plot=True, plot_warmup=False, animation_file='set_3/data/karman_vortex_street_n_35_re_40.mp4')
+    animation_file = f'set_3/data/karman_vortex_street_n_{N}_re_{int(Re)}.mp4'
+    run(grid, t_ms=10000, plot=True, plot_warmup=False, animation_file=animation_file)
